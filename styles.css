@@ -1,0 +1,32 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  min-height: 100%;
+  background-color: #f3eddc;
+}
+
+html.dark {
+  background-color: #0a1714;
+}
+
+body {
+  min-height: 100%;
+}
+
+.noise {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.06;
+  background-image: repeating-radial-gradient(circle at 0 0, transparent 0, #000 1px, transparent 2px);
+}
+
+.dark .noise {
+  opacity: 0.08;
+  background-image: repeating-radial-gradient(circle at 0 0, transparent 0, #fff 1px, transparent 2px);
+}
