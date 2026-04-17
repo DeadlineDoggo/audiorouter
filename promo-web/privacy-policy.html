@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SoundRoot Privacy Policy</title>
+  <meta name="description" content="Privacy Policy for SoundRoot KDE Plasma audio routing applet." />
+  <link rel="icon" type="image/png" href="assets/icon.png" />
+  <script>
+    (function () {
+      const key = "soundroot-theme";
+      const saved = localStorage.getItem(key);
+      const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const useDark = saved ? saved === "dark" : systemPrefersDark;
+      if (useDark) document.documentElement.classList.add("dark");
+    })();
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ["Space Grotesk", "sans-serif"],
+            mono: ["IBM Plex Mono", "monospace"]
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="font-display bg-[#f3eddc] text-[#11231f] dark:bg-[#0a1714] dark:text-[#dcebe5]">
+  <header class="sticky top-0 z-20 border-b border-black/10 dark:border-white/10 backdrop-blur-xl bg-white/60 dark:bg-black/25">
+    <div class="mx-auto max-w-4xl px-4 py-3 md:px-6 flex items-center justify-between">
+      <a href="index.html" class="flex items-center gap-3">
+        <img class="h-8 w-8 rounded-lg border border-black/10 dark:border-white/10" src="assets/icon.png" alt="SoundRoot icon" />
+        <span class="text-lg font-bold tracking-wide">SoundRoot</span>
+      </a>
+      <button id="themeToggle" class="rounded-full border border-black/15 dark:border-white/20 px-3 py-1.5 text-xs font-mono uppercase tracking-wider hover:bg-black/5 dark:hover:bg-white/10">Toggle Theme</button>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-4xl px-4 py-8 md:px-6 md:py-10">
+    <p class="font-mono text-xs tracking-[0.16em] text-amber-700 dark:text-amber-300">LEGAL</p>
+    <h1 class="mt-2 text-3xl font-bold md:text-5xl">Privacy Policy</h1>
+    <p class="mt-3 text-sm text-black/70 dark:text-white/70">Effective date: 2026-04-10</p>
+
+    <section class="mt-8 space-y-5 text-sm leading-7 md:text-base">
+      <p>This Privacy Policy explains how SoundRoot (the KDE Plasma audio-routing applet in this repository) handles local user data.</p>
+
+      <h2 class="text-xl font-bold">1. Data We Process</h2>
+      <p>SoundRoot processes runtime audio metadata exposed by PulseAudio or PipeWire PulseAudio compatibility, including application names, media names when available, icon names, sink-input metadata, and output sink names/descriptions. This is required to display routes and apply audio routing actions.</p>
+
+      <h2 class="text-xl font-bold">2. Data We Store</h2>
+      <p>SoundRoot stores user routing configuration locally at <span class="font-mono">~/.config/audiorouter/groups.json</span>. Stored values include group identifiers, group names/colors, active state, route source application names, route outputs, and route volume settings.</p>
+
+      <h2 class="text-xl font-bold">3. Data We Do Not Intentionally Collect</h2>
+      <p>In this repository implementation, SoundRoot does not intentionally send telemetry/analytics to external servers, upload configuration to cloud services, or record microphone/audio samples.</p>
+
+      <h2 class="text-xl font-bold">4. Local Permissions Required</h2>
+      <p>SoundRoot requires standard user-session access to PulseAudio-compatible APIs, local config file read/write access, and KDE Plasma runtime capabilities. Root privileges are not required for normal operation.</p>
+
+      <h2 class="text-xl font-bold">5. User Controls</h2>
+      <p>You can remove routes/groups in the UI, delete local configuration files, or uninstall the applet. If you use shared systems, protect your account and home directory access.</p>
+
+      <h2 class="text-xl font-bold">6. Policy Updates</h2>
+      <p>This policy may be updated when project behavior changes. The latest version in the repository should be considered authoritative for current code.</p>
+    </section>
+
+    <div class="mt-10 flex gap-3">
+      <a href="terms-of-use.html" class="rounded-full border border-black/15 dark:border-white/20 px-5 py-2.5 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10">Read Terms of Use</a>
+      <a href="index.html" class="rounded-full bg-black text-white dark:bg-white dark:text-black px-5 py-2.5 text-sm font-semibold">Back to Home</a>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const storageKey = "soundroot-theme";
+      const btn = document.getElementById("themeToggle");
+      const mq = window.matchMedia("(prefers-color-scheme: dark)");
+
+      function resolveTheme() {
+        const saved = localStorage.getItem(storageKey);
+        if (saved === "dark" || saved === "light") return saved;
+        return mq.matches ? "dark" : "light";
+      }
+
+      function applyTheme(theme) {
+        document.documentElement.classList.toggle("dark", theme === "dark");
+        btn.textContent = theme === "dark" ? "Dark Theme" : "Light Theme";
+      }
+
+      applyTheme(resolveTheme());
+
+      btn.addEventListener("click", function () {
+        const isDark = document.documentElement.classList.contains("dark");
+        const next = isDark ? "light" : "dark";
+        localStorage.setItem(storageKey, next);
+        applyTheme(next);
+      });
+
+      mq.addEventListener("change", function (event) {
+        if (!localStorage.getItem(storageKey)) applyTheme(event.matches ? "dark" : "light");
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SoundRoot | Audio Routing for KDE Plasma</title>
+  <meta name="description" content="SoundRoot lets you route app audio to multiple devices with groups and shortcuts on KDE Plasma." />
+  <link rel="icon" type="image/png" href="assets/icon.png" />
+  <script>
+    (function () {
+      const key = "soundroot-theme";
+      const saved = localStorage.getItem(key);
+      const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const useDark = saved ? saved === "dark" : systemPrefersDark;
+      if (useDark) {
+        document.documentElement.classList.add("dark");
+      }
+    })();
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ["Space Grotesk", "sans-serif"],
+            mono: ["IBM Plex Mono", "monospace"]
+          },
+          colors: {
+            ember: {
+              100: "#fff6df",
+              200: "#fbeab7",
+              300: "#f4d26f",
+              400: "#efbd3f",
+              500: "#dd9f11"
+            },
+            pine: {
+              900: "#0a1714",
+              800: "#11231f",
+              700: "#19352f",
+              200: "#bad8ce",
+              100: "#dcebe5"
+            }
+          },
+          boxShadow: {
+            glow: "0 22px 55px rgba(16, 45, 40, 0.35)",
+            lightglow: "0 22px 55px rgba(208, 147, 22, 0.25)"
+          },
+          backgroundImage: {
+            heroLight: "radial-gradient(1200px 550px at 10% -10%, rgba(255,212,121,.36), transparent 55%), radial-gradient(980px 600px at 100% 0%, rgba(85,175,148,.27), transparent 58%), linear-gradient(140deg,#fff9ec 0%,#f9f2df 45%,#f3eddc 100%)",
+            heroDark: "radial-gradient(1200px 550px at 10% -10%, rgba(242,178,52,.18), transparent 55%), radial-gradient(980px 600px at 100% 0%, rgba(62,170,136,.20), transparent 58%), linear-gradient(140deg,#081210 0%,#10231f 45%,#0a1714 100%)"
+          },
+          keyframes: {
+            rise: {
+              "0%": { opacity: "0", transform: "translateY(16px)" },
+              "100%": { opacity: "1", transform: "translateY(0)" }
+            }
+          },
+          animation: {
+            rise: "rise .7s ease forwards"
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="font-display text-pine-800 dark:text-pine-100 bg-heroLight dark:bg-heroDark selection:bg-ember-300/70 dark:selection:bg-emerald-300/45">
+  <div class="noise"></div>
+  <div class="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,.45),transparent_50%)] dark:bg-[radial-gradient(circle_at_20%_10%,rgba(255,228,162,.08),transparent_50%)]"></div>
+
+  <header class="sticky top-0 z-30 border-b border-black/10 dark:border-white/10 backdrop-blur-xl bg-white/55 dark:bg-black/25">
+    <div class="mx-auto max-w-6xl px-4 py-3 md:px-6 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img class="h-8 w-8 rounded-lg border border-black/10 dark:border-white/10" src="assets/icon.png" alt="SoundRoot icon" />
+        <span class="text-lg font-bold tracking-wide">SoundRoot</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="themeToggle" class="rounded-full border border-black/15 dark:border-white/20 px-3 py-1.5 text-xs font-mono uppercase tracking-wider hover:bg-black/5 dark:hover:bg-white/10">
+          Auto Theme
+        </button>
+        <a class="rounded-full border border-black/15 dark:border-white/20 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="#download">Get Started</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-6xl px-4 py-8 md:px-6 md:py-12">
+    <section class="grid items-center gap-6 lg:grid-cols-[1.08fr_1fr]">
+      <div class="opacity-0 animate-rise [animation-delay:80ms] [animation-fill-mode:forwards]">
+        <p class="font-mono text-xs tracking-[0.18em] text-amber-700 dark:text-amber-300">KDE PLASMA APPLET</p>
+        <h1 class="mt-2 text-4xl font-bold leading-[0.98] md:text-6xl xl:text-7xl">
+          Route every app to the right speaker, instantly.
+        </h1>
+        <p class="mt-4 max-w-2xl text-base text-pine-700 dark:text-pine-200 md:text-lg">
+          Build audio rooms, switch them with shortcuts, and keep your setup remembered.
+          SoundRoot gives you focused routing without opening a full mixer every time.
+        </p>
+        <div class="mt-6 flex flex-wrap gap-3">
+          <a class="rounded-full bg-amber-400 px-5 py-2.5 text-sm font-bold text-amber-950 shadow-lightglow transition hover:-translate-y-0.5 hover:bg-amber-300" href="#features">Explore Features</a>
+          <a class="rounded-full border border-black/15 dark:border-white/20 bg-white/60 dark:bg-white/5 px-5 py-2.5 text-sm font-semibold transition hover:-translate-y-0.5 hover:bg-white/85 dark:hover:bg-white/10" href="#shots">View Preview</a>
+        </div>
+      </div>
+
+      <div class="opacity-0 animate-rise [animation-delay:180ms] [animation-fill-mode:forwards] rounded-3xl border border-black/10 dark:border-white/10 overflow-hidden shadow-glow bg-white/70 dark:bg-black/25">
+        <img class="w-full aspect-[9/6.3] object-cover" src="https://picsum.photos/seed/soundroot-ui-fancy/980/680" alt="Placeholder screenshot of SoundRoot interface" />
+        <div class="flex items-center justify-between px-4 py-2.5 text-xs font-mono text-pine-700 dark:text-pine-200">
+          <span>Main Widget View</span>
+          <span>SoundRoot UI concept</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="mt-12 grid gap-3 md:mt-16 md:grid-cols-3">
+      <article class="opacity-0 animate-rise [animation-delay:140ms] [animation-fill-mode:forwards] rounded-2xl border border-black/10 dark:border-white/10 bg-white/65 dark:bg-white/5 p-5">
+        <h2 class="text-xl font-bold">Audio Rooms</h2>
+        <p class="mt-2 text-sm text-pine-700 dark:text-pine-200">Group routes by context such as gaming, streaming, or meetings, then activate only what you need.</p>
+      </article>
+      <article class="opacity-0 animate-rise [animation-delay:230ms] [animation-fill-mode:forwards] rounded-2xl border border-black/10 dark:border-white/10 bg-white/65 dark:bg-white/5 p-5">
+        <h2 class="text-xl font-bold">Many-to-Many Routing</h2>
+        <p class="mt-2 text-sm text-pine-700 dark:text-pine-200">Send one app to multiple outputs or isolate several apps to dedicated devices with per-route volume.</p>
+      </article>
+      <article class="opacity-0 animate-rise [animation-delay:320ms] [animation-fill-mode:forwards] rounded-2xl border border-black/10 dark:border-white/10 bg-white/65 dark:bg-white/5 p-5">
+        <h2 class="text-xl font-bold">Global Shortcuts</h2>
+        <p class="mt-2 text-sm text-pine-700 dark:text-pine-200">Jump to next or previous room without opening the widget, using KDE global acceleration settings.</p>
+      </article>
+    </section>
+
+    <section id="shots" class="mt-14 md:mt-20">
+      <div class="opacity-0 animate-rise [animation-delay:120ms] [animation-fill-mode:forwards]">
+        <p class="font-mono text-xs tracking-[0.18em] text-amber-700 dark:text-amber-300">PRODUCT PREVIEW</p>
+        <h2 class="mt-2 text-3xl font-bold md:text-4xl">Core flows you can present on your project page.</h2>
+      </div>
+      <div class="mt-4 grid gap-4 md:mt-6 md:grid-cols-3">
+        <figure class="opacity-0 animate-rise [animation-delay:160ms] [animation-fill-mode:forwards] overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/65 dark:bg-white/5">
+          <img class="w-full aspect-[7/5.2] object-cover" src="https://picsum.photos/seed/soundroot-route-fancy/700/520" alt="Placeholder image for route management" />
+          <figcaption class="px-3 py-2 text-xs font-mono text-pine-700 dark:text-pine-200">Route setup and output selection</figcaption>
+        </figure>
+        <figure class="opacity-0 animate-rise [animation-delay:240ms] [animation-fill-mode:forwards] overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/65 dark:bg-white/5">
+          <img class="w-full aspect-[7/5.2] object-cover" src="https://picsum.photos/seed/soundroot-group-fancy/700/520" alt="Placeholder image for groups" />
+          <figcaption class="px-3 py-2 text-xs font-mono text-pine-700 dark:text-pine-200">Audio groups and activation state</figcaption>
+        </figure>
+        <figure class="opacity-0 animate-rise [animation-delay:320ms] [animation-fill-mode:forwards] overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/65 dark:bg-white/5">
+          <img class="w-full aspect-[7/5.2] object-cover" src="https://picsum.photos/seed/soundroot-shortcuts-fancy/700/520" alt="Placeholder image for shortcuts" />
+          <figcaption class="px-3 py-2 text-xs font-mono text-pine-700 dark:text-pine-200">Keyboard shortcut workflow</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="download" class="mt-14 rounded-3xl border border-black/10 dark:border-white/10 bg-[linear-gradient(135deg,rgba(255,194,89,.32),rgba(73,187,148,.28))] dark:bg-[linear-gradient(135deg,rgba(255,194,89,.18),rgba(73,187,148,.18))] p-6 md:mt-20 md:p-10">
+      <h2 class="text-3xl font-bold md:text-5xl">Ready to route smarter?</h2>
+      <p class="mt-3 max-w-3xl text-sm text-pine-700 dark:text-pine-100 md:text-base">
+        SoundRoot is a KDE Plasma applet for multi-output routing, route groups, and quick switching with global shortcuts.
+      </p>
+      <div class="mt-5 flex flex-wrap gap-3">
+        <a class="rounded-full bg-pine-900 px-5 py-2.5 text-sm font-bold text-pine-100 transition hover:-translate-y-0.5 dark:bg-emerald-200 dark:text-pine-900" href="https://github.com/" target="_blank" rel="noopener noreferrer">View Source Code</a>
+        <a class="rounded-full border border-black/15 dark:border-white/20 px-5 py-2.5 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="https://store.kde.org" target="_blank" rel="noopener noreferrer">Browse on KDE Store</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-black/10 dark:border-white/10 py-5 text-center text-xs font-mono text-pine-700 dark:text-pine-200">
+    <p>SoundRoot • KDE Plasma audio routing applet • Tailwind landing page</p>
+    <div class="mt-2 flex items-center justify-center gap-4 text-[11px]">
+      <a class="underline-offset-4 hover:underline" href="privacy-policy.html">Privacy Policy</a>
+      <a class="underline-offset-4 hover:underline" href="terms-of-use.html">Terms of Use</a>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      const storageKey = "soundroot-theme";
+      const btn = document.getElementById("themeToggle");
+      const mq = window.matchMedia("(prefers-color-scheme: dark)");
+
+      function resolveTheme() {
+        const saved = localStorage.getItem(storageKey);
+        if (saved === "dark" || saved === "light") {
+          return saved;
+        }
+        return mq.matches ? "dark" : "light";
+      }
+
+      function applyTheme(theme) {
+        document.documentElement.classList.toggle("dark", theme === "dark");
+        btn.textContent = theme === "dark" ? "Dark Theme" : "Light Theme";
+        btn.setAttribute("aria-label", "Current theme: " + theme + ". Click to toggle.");
+      }
+
+      function saveAndApply(theme) {
+        localStorage.setItem(storageKey, theme);
+        applyTheme(theme);
+      }
+
+      applyTheme(resolveTheme());
+
+      btn.addEventListener("click", function () {
+        const isDark = document.documentElement.classList.contains("dark");
+        saveAndApply(isDark ? "light" : "dark");
+      });
+
+      mq.addEventListener("change", function (event) {
+        if (!localStorage.getItem(storageKey)) {
+          applyTheme(event.matches ? "dark" : "light");
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

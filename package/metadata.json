@@ -1,0 +1,21 @@
+{
+    "KPlugin": {
+        "Id": "org.kde.plasma.soundroot",
+        "Name": "SoundRoot",
+        "Description": "Route application audio streams to different output devices with grouped presets",
+        "Icon": "audio-volume-high",
+        "Authors": [
+            {
+                "Name": "SoundRoot Contributors",
+                "Email": "noreply@example.com"
+            }
+        ],
+        "Category": "Multimedia",
+        "License": "GPL-2.0-or-later",
+        "Version": "1.0.0",
+        "Website": "https://store.kde.org"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-MainScript": "ui/main.qml"
+}

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SoundRoot Terms of Use</title>
+  <meta name="description" content="Terms of Use for SoundRoot KDE Plasma audio routing applet." />
+  <link rel="icon" type="image/png" href="assets/icon.png" />
+  <script>
+    (function () {
+      const key = "soundroot-theme";
+      const saved = localStorage.getItem(key);
+      const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const useDark = saved ? saved === "dark" : systemPrefersDark;
+      if (useDark) document.documentElement.classList.add("dark");
+    })();
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ["Space Grotesk", "sans-serif"],
+            mono: ["IBM Plex Mono", "monospace"]
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="font-display bg-[#f3eddc] text-[#11231f] dark:bg-[#0a1714] dark:text-[#dcebe5]">
+  <header class="sticky top-0 z-20 border-b border-black/10 dark:border-white/10 backdrop-blur-xl bg-white/60 dark:bg-black/25">
+    <div class="mx-auto max-w-4xl px-4 py-3 md:px-6 flex items-center justify-between">
+      <a href="index.html" class="flex items-center gap-3">
+        <img class="h-8 w-8 rounded-lg border border-black/10 dark:border-white/10" src="assets/icon.png" alt="SoundRoot icon" />
+        <span class="text-lg font-bold tracking-wide">SoundRoot</span>
+      </a>
+      <button id="themeToggle" class="rounded-full border border-black/15 dark:border-white/20 px-3 py-1.5 text-xs font-mono uppercase tracking-wider hover:bg-black/5 dark:hover:bg-white/10">Toggle Theme</button>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-4xl px-4 py-8 md:px-6 md:py-10">
+    <p class="font-mono text-xs tracking-[0.16em] text-amber-700 dark:text-amber-300">LEGAL</p>
+    <h1 class="mt-2 text-3xl font-bold md:text-5xl">Terms of Use</h1>
+    <p class="mt-3 text-sm text-black/70 dark:text-white/70">Effective date: 2026-04-10</p>
+
+    <section class="mt-8 space-y-5 text-sm leading-7 md:text-base">
+      <p>These Terms of Use govern use of SoundRoot, a KDE Plasma audio-routing applet provided through this project repository.</p>
+
+      <h2 class="text-xl font-bold">1. Acceptance</h2>
+      <p>By installing, running, or distributing SoundRoot, you agree to these Terms.</p>
+
+      <h2 class="text-xl font-bold">2. License</h2>
+      <p>Project metadata declares GPL-2.0-or-later. Use, modification, and redistribution must comply with the applicable open-source license terms included with the project.</p>
+
+      <h2 class="text-xl font-bold">3. Permitted Use</h2>
+      <p>You may use SoundRoot for lawful personal, educational, or commercial desktop audio-routing scenarios in accordance with local laws and platform policies.</p>
+
+      <h2 class="text-xl font-bold">4. Prohibited Use</h2>
+      <p>You must not use SoundRoot to violate law, abuse third-party systems, distribute malicious software, or misrepresent the app as a guaranteed security/privacy product.</p>
+
+      <h2 class="text-xl font-bold">5. Dependency Disclaimer</h2>
+      <p>SoundRoot depends on KDE Plasma, Qt, and PulseAudio/PipeWire compatibility. Behavior may vary by Linux distribution, package versions, and local system configuration.</p>
+
+      <h2 class="text-xl font-bold">6. No Warranty</h2>
+      <p>To the maximum extent permitted by law, SoundRoot is provided "as is" without warranties of any kind, including merchantability or fitness for a particular purpose.</p>
+
+      <h2 class="text-xl font-bold">7. Limitation of Liability</h2>
+      <p>Contributors and maintainers are not liable for indirect, incidental, consequential, or special damages, including data/configuration loss or service interruption.</p>
+
+      <h2 class="text-xl font-bold">8. Updates</h2>
+      <p>These Terms may change as the project evolves. The latest repository version applies to current code and releases.</p>
+    </section>
+
+    <div class="mt-10 flex gap-3">
+      <a href="privacy-policy.html" class="rounded-full border border-black/15 dark:border-white/20 px-5 py-2.5 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10">Read Privacy Policy</a>
+      <a href="index.html" class="rounded-full bg-black text-white dark:bg-white dark:text-black px-5 py-2.5 text-sm font-semibold">Back to Home</a>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const storageKey = "soundroot-theme";
+      const btn = document.getElementById("themeToggle");
+      const mq = window.matchMedia("(prefers-color-scheme: dark)");
+
+      function resolveTheme() {
+        const saved = localStorage.getItem(storageKey);
+        if (saved === "dark" || saved === "light") return saved;
+        return mq.matches ? "dark" : "light";
+      }
+
+      function applyTheme(theme) {
+        document.documentElement.classList.toggle("dark", theme === "dark");
+        btn.textContent = theme === "dark" ? "Dark Theme" : "Light Theme";
+      }
+
+      applyTheme(resolveTheme());
+
+      btn.addEventListener("click", function () {
+        const isDark = document.documentElement.classList.contains("dark");
+        const next = isDark ? "light" : "dark";
+        localStorage.setItem(storageKey, next);
+        applyTheme(next);
+      });
+
+      mq.addEventListener("change", function (event) {
+        if (!localStorage.getItem(storageKey)) applyTheme(event.matches ? "dark" : "light");
+      });
+    })();
+  </script>
+</body>
+</html>
