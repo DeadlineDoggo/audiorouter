@@ -1,3 +1,6 @@
+# Notes
+notes.md
+
 # Local tooling artifacts
 .codex
 
@@ -19,3 +22,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Funny files
+_*
