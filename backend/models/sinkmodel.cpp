@@ -55,7 +55,14 @@ QString SinkModel::sinkDescriptionAt(int row) const
 
 void SinkModel::refresh()
 {
-    auto newSinks = m_backend->availableSinks();
+    auto rawSinks = m_backend->availableSinks();
+    // Strip internal combine sinks from the display list; they stay in the
+    // backend's m_sinks so routing lookups can still find them.
+    QVector<PASinkInfo> newSinks;
+    for (const auto &s : rawSinks) {
+        if (!s.name.startsWith(QStringLiteral("audiorouter_")))
+            newSinks.append(s);
+    }
 
     // Fast path: same count, same sinks → check for property-only changes
     if (newSinks.size() == m_sinks.size()) {

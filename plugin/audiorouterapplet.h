@@ -58,6 +58,9 @@ signals:
     void nextRoomActivated();
     void prevRoomActivated();
     void masterVolumeChanged(int volumePercent);
+    /// Emitted when a new stream appears while a room is active.
+    /// QML should rebuild connections from model and re-apply routing.
+    void reapplyRequested();
 private:
     void setupConnections();
 

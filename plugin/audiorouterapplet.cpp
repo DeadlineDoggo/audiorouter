@@ -19,11 +19,12 @@ AudioRouterApplet::AudioRouterApplet(QObject *parent,
     m_groupModel.load();
     m_audioBackend.initialize();
 
-    // Debounced re-apply: when new audio streams appear, re-route them
+    // Debounced re-apply signal: when new audio streams appear, tell QML
+    // to rebuild ordinal mapping and re-route (avoids stale ordinal swaps).
     m_reapplyTimer.setSingleShot(true);
     m_reapplyTimer.setInterval(1000);
     connect(&m_reapplyTimer, &QTimer::timeout,
-            this, &AudioRouterApplet::applyAllActiveGroups);
+            this, &AudioRouterApplet::reapplyRequested);
 
     // Create an action collection specifically for this applet and register
     // user-configurable actions there so they appear under the applet in
@@ -144,7 +145,13 @@ void AudioRouterApplet::setupConnections()
     // infinite re-apply loop.
     connect(&m_audioBackend, &PulseAudioBackend::sinkInputAdded,
             this, [this]() {
-                m_reapplyTimer.start();
+                // Only signal QML if a room is actually active
+                for (int i = 0; i < m_groupModel.rowCount(); ++i) {
+                    if (m_groupModel.isGroupActive(i)) {
+                        m_reapplyTimer.start();
+                        return;
+                    }
+                }
             });
 
     connect(&m_audioBackend, &PulseAudioBackend::defaultSinkVolumeChanged,

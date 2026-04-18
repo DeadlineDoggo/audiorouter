@@ -1525,6 +1525,15 @@ PlasmaExtras.Representation {
         }
     }
 
+    // ── Re-apply routing when new streams appear (debounced from C++) ──
+    Connections {
+        target: Plasmoid
+        function onReapplyRequested() {
+            fullRoot.rebuildConnectionsFromModel()
+            fullRoot.applyPerStreamRouting()
+        }
+    }
+
     // ── Keyboard shortcuts (active while popup is open) ───────────
     Shortcut {
         sequence: "Ctrl+Right"

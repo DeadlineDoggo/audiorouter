@@ -745,10 +745,6 @@ void PulseAudioBackend::sinkInfoCallback(pa_context * /*c*/,
     sink.volumePercent = static_cast<int>(
         pa_cvolume_avg(&info->volume) * 100.0 / PA_VOLUME_NORM + 0.5);
 
-    // Hide internal combine sinks we created for multi-output routing
-    if (sink.name.startsWith(QStringLiteral("audiorouter_")))
-        return;
-
     self->m_pendingSinks.append(sink);
 }
 
