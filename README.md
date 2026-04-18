@@ -16,7 +16,7 @@ SoundRoot is a KDE Plasma 6 plasmoid that lets you create audio "rooms" — name
 
 - **Audio Rooms** — Create named, colour-coded rooms with independent routing configurations
 - **Many-to-Many Routing** — Wire any source to any combination of output sinks
-- **Per-Route Volume** — Individual volume control (0–150%) for every connection
+- **Per-Group Volume** — Volume control (0–150%) per audio room
 - **Drag-to-Wire** — Visual connection board with bezier wires coloured by sink
 - **Global Keyboard Shortcuts** — Switch rooms instantly via configurable KDE shortcuts (default: `Ctrl+Alt+→` / `Ctrl+Alt+←`)
 - **Persistent Config** — All rooms and routes are saved and restored automatically
