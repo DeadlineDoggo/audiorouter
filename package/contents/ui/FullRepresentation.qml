@@ -143,6 +143,22 @@ PlasmaExtras.Representation {
         return pickColor()
     }
 
+    // Look up appName + mediaName for a live input: node key
+    function streamMetaForKey(nodeKey) {
+        if (nodeKey.indexOf("input:") !== 0) return {appName: "", mediaName: ""}
+        var inputIdx = parseInt(nodeKey.substring(6))
+        if (!fullRoot.sinkInputModel) return {appName: "", mediaName: ""}
+        for (var i = 0; i < fullRoot.sinkInputModel.count; i++) {
+            var iidx = fullRoot.sinkInputModel.index(i, 0)
+            if (fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 1) === inputIdx)
+                return {
+                    appName:   fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 2),
+                    mediaName: fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 3)
+                }
+        }
+        return {appName: "", mediaName: ""}
+    }
+
     function addConnection(fromKey, toKey) {
         if (fromKey === toKey) return
         // Don't duplicate
@@ -164,9 +180,14 @@ PlasmaExtras.Representation {
         var newConns = connections.slice()
         for (var j = 0; j < newConns.length; j++) {
             if (oldColors[newConns[j].color])
-                newConns[j] = { from: newConns[j].from, to: newConns[j].to, color: color }
+                newConns[j] = { from: newConns[j].from, to: newConns[j].to, color: color,
+                                appName: newConns[j].appName || "", mediaName: newConns[j].mediaName || "" }
         }
-        newConns.push({ from: fromKey, to: toKey, color: color })
+        // Determine which key is the input side and attach stream metadata
+        var inputKey = (fromKey.indexOf("input:") === 0) ? fromKey : toKey
+        var meta = streamMetaForKey(inputKey)
+        newConns.push({ from: fromKey, to: toKey, color: color,
+                        appName: meta.appName, mediaName: meta.mediaName })
         connections = newConns
         syncConnectionsToModel()
         connectionCanvas.requestPaint()
@@ -324,22 +345,109 @@ PlasmaExtras.Representation {
             if (ordinal >= 0 && ordinal < streams.length) {
                 // Per-stream route: connect this specific stream
                 var fromKey = "input:" + streams[ordinal]
+                var meta = streamMetaForKey(fromKey)
                 for (var k = 0; k < outputNames.length; k++)
-                    newConns.push({ from: fromKey, to: "sink:" + outputNames[k], color: color })
+                    newConns.push({ from: fromKey, to: "sink:" + outputNames[k], color: color,
+                                    appName: meta.appName, mediaName: meta.mediaName })
             } else if (ordinal < 0 && streams.length > 0) {
                 // Legacy route (no ordinal): connect ALL streams of this app
                 for (var j2 = 0; j2 < streams.length; j2++) {
+                    var fk2 = "input:" + streams[j2]
+                    var meta2 = streamMetaForKey(fk2)
                     for (var k2 = 0; k2 < outputNames.length; k2++)
-                        newConns.push({ from: "input:" + streams[j2], to: "sink:" + outputNames[k2], color: color })
+                        newConns.push({ from: fk2, to: "sink:" + outputNames[k2], color: color,
+                                        appName: meta2.appName, mediaName: meta2.mediaName })
                 }
             } else {
                 // Stream not currently available — store as app: placeholder
                 for (var k3 = 0; k3 < outputNames.length; k3++)
-                    newConns.push({ from: "app:" + baseAppName, to: "sink:" + outputNames[k3], color: color })
+                    newConns.push({ from: "app:" + baseAppName, to: "sink:" + outputNames[k3], color: color,
+                                    appName: baseAppName, mediaName: "" })
             }
         }
         connections = newConns
         connectionCanvas.requestPaint()
+    }
+
+    // Called on reapplyRequested (new stream appeared while room is active).
+    // Preserves all live connections unchanged. Patches dead connections
+    // (whose input PA index no longer exists) by matching the new stream's
+    // appName+mediaName — avoids ordinal-position swap when tabs pause/resume.
+    function handleNewStreams() {
+        if (!fullRoot.sinkInputModel) return
+
+        // Build map: inputIdx → {appName, mediaName} for all live streams
+        var liveStreams = {}
+        for (var j = 0; j < fullRoot.sinkInputModel.count; j++) {
+            var iidx = fullRoot.sinkInputModel.index(j, 0)
+            var idx       = fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 1)
+            var appName   = fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 2)
+            var mediaName = fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 3)
+            liveStreams[idx] = { appName: appName, mediaName: mediaName }
+        }
+
+        // From current connections, collect which live input indices are already wired
+        var wiredIndices = {}
+        for (var k = 0; k < connections.length; k++) {
+            var c = connections[k]
+            if (c.from.indexOf("input:") === 0) {
+                var cidx = parseInt(c.from.substring(6))
+                if (liveStreams[cidx]) wiredIndices[cidx] = true
+            }
+        }
+
+        // Collect brand-new (unwired) live streams as candidates to fill dead slots
+        var newStreamCandidates = [] // [{inputIdx, appName, mediaName}]
+        for (var nidx in liveStreams) {
+            if (!wiredIndices[nidx])
+                newStreamCandidates.push({ inputIdx: parseInt(nidx),
+                                           appName:   liveStreams[nidx].appName,
+                                           mediaName: liveStreams[nidx].mediaName })
+        }
+
+        if (newStreamCandidates.length === 0) {
+            // No new streams — just re-apply existing connections for any that drifted
+            applyPerStreamRouting()
+            return
+        }
+
+        // Patch dead connections: replace dead input:X with a matching new stream
+        var usedCandidates = {}
+        var newConns = connections.slice()
+        for (var i = 0; i < newConns.length; i++) {
+            var conn = newConns[i]
+            if (conn.from.indexOf("input:") !== 0) continue
+            var connIdx = parseInt(conn.from.substring(6))
+            if (liveStreams[connIdx]) continue  // Still live — leave alone
+
+            // Dead connection — find best matching new stream
+            // Priority: same appName AND same mediaName (tab title stable across pause/resume)
+            // Fallback: same appName only (if mediaName blank or changed)
+            var bestMatch = -1
+            for (var s = 0; s < newStreamCandidates.length; s++) {
+                var cand = newStreamCandidates[s]
+                if (usedCandidates[cand.inputIdx]) continue
+                if (cand.appName !== (conn.appName || "")) continue
+                var mediaMatch = (conn.mediaName && conn.mediaName !== "" &&
+                                  cand.mediaName && cand.mediaName !== "" &&
+                                  cand.mediaName === conn.mediaName)
+                if (mediaMatch) { bestMatch = s; break }
+                if (bestMatch < 0) bestMatch = s  // appName-only fallback
+            }
+
+            if (bestMatch >= 0) {
+                var matched = newStreamCandidates[bestMatch]
+                usedCandidates[matched.inputIdx] = true
+                newConns[i] = { from: "input:" + matched.inputIdx, to: conn.to,
+                                color: conn.color,
+                                appName: matched.appName, mediaName: matched.mediaName }
+            }
+            // If no match found, leave the dead connection (won't be routed)
+        }
+
+        connections = newConns
+        connectionCanvas.requestPaint()
+        applyPerStreamRouting()
     }
 
     // Get wire endpoint: right-center of app card, left-center of sink card
@@ -1529,8 +1637,7 @@ PlasmaExtras.Representation {
     Connections {
         target: Plasmoid
         function onReapplyRequested() {
-            fullRoot.rebuildConnectionsFromModel()
-            fullRoot.applyPerStreamRouting()
+            fullRoot.handleNewStreams()
         }
     }
 
