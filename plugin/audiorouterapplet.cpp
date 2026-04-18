@@ -4,8 +4,8 @@
 #include <QAction>
 #include <QKeySequence>
 #include <KLocalizedString>
-#include <KActionCollection>
 #include <KGlobalAccel>
+#include <KActionCollection>
 
 AudioRouterApplet::AudioRouterApplet(QObject *parent,
                                      const KPluginMetaData &data,
@@ -25,33 +25,70 @@ AudioRouterApplet::AudioRouterApplet(QObject *parent,
     m_reapplyTimer.setInterval(1000);
     connect(&m_reapplyTimer, &QTimer::timeout,
             this, &AudioRouterApplet::reapplyRequested);
-
-    // Create an action collection specifically for this applet and register
-    // user-configurable actions there so they appear under the applet in
-    // System Settings → Shortcuts.
-    auto *coll = new KActionCollection(this, QStringLiteral("org.kde.plasma.soundroot"));
-    coll->setComponentDisplayName(i18n("SoundRoot"));
-    QAction *nextAction = coll->addAction(QStringLiteral("nextRoom"));
-    nextAction->setObjectName(QStringLiteral("nextRoom"));
-    nextAction->setText(i18n("Activate Next Audio Room"));
-    // Provide a sensible default so the Shortcuts UI shows the action; users can rebind it.
-    const QList<QKeySequence> nextDefaults = { QKeySequence("Ctrl+Alt+Right") };
-    KGlobalAccel::self()->setDefaultShortcut(nextAction, nextDefaults);
-    KGlobalAccel::self()->setShortcut(nextAction, nextDefaults);
-    connect(nextAction, &QAction::triggered, this, &AudioRouterApplet::nextRoomActivated);
-
-    QAction *prevAction = coll->addAction(QStringLiteral("prevRoom"));
-    prevAction->setObjectName(QStringLiteral("prevRoom"));
-    prevAction->setText(i18n("Activate Previous Audio Room"));
-    const QList<QKeySequence> prevDefaults = { QKeySequence("Ctrl+Alt+Left") };
-    KGlobalAccel::self()->setDefaultShortcut(prevAction, prevDefaults);
-    KGlobalAccel::self()->setShortcut(prevAction, prevDefaults);
-    connect(prevAction, &QAction::triggered, this, &AudioRouterApplet::prevRoomActivated);
 }
 
 AudioRouterApplet::~AudioRouterApplet()
 {
     m_audioBackend.shutdown();
+}
+
+void AudioRouterApplet::init()
+{
+    Plasma::Applet::init();
+
+    // Register room-switching global shortcuts INSIDE init() so this runs
+    // AFTER Plasma has already called setGlobalShortcut() for the applet's
+    // "activate widget" shortcut.  If we register here instead of in the
+    // constructor, our KGlobalAccel component save won't clobber the
+    // "activate widget N" entry that Plasma just wrote to kglobalshortcutsrc.
+    auto *coll = new KActionCollection(this, QStringLiteral("org.kde.plasma.soundroot"));
+    coll->setComponentDisplayName(i18n("SoundRoot"));
+
+    m_nextAction = coll->addAction(QStringLiteral("nextRoom"));
+    m_nextAction->setObjectName(QStringLiteral("nextRoom"));
+    m_nextAction->setText(i18n("Activate Next Audio Room"));
+    KGlobalAccel::self()->setDefaultShortcut(m_nextAction, { QKeySequence(QStringLiteral("Ctrl+Alt+Right")) });
+    KGlobalAccel::self()->setShortcut(m_nextAction, { QKeySequence(QStringLiteral("Ctrl+Alt+Right")) });
+    connect(m_nextAction, &QAction::triggered, this, &AudioRouterApplet::nextRoomActivated);
+
+    m_prevAction = coll->addAction(QStringLiteral("prevRoom"));
+    m_prevAction->setObjectName(QStringLiteral("prevRoom"));
+    m_prevAction->setText(i18n("Activate Previous Audio Room"));
+    KGlobalAccel::self()->setDefaultShortcut(m_prevAction, { QKeySequence(QStringLiteral("Ctrl+Alt+Left")) });
+    KGlobalAccel::self()->setShortcut(m_prevAction, { QKeySequence(QStringLiteral("Ctrl+Alt+Left")) });
+    connect(m_prevAction, &QAction::triggered, this, &AudioRouterApplet::prevRoomActivated);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Shortcut properties (read/write via KGlobalAccel — mirrors globalShortcut)
+// ═════════════════════════════════════════════════════════════════════════════
+
+QKeySequence AudioRouterApplet::nextRoomShortcut() const
+{
+    if (!m_nextAction) return QKeySequence();
+    const auto seqs = KGlobalAccel::self()->shortcut(m_nextAction);
+    return seqs.isEmpty() ? QKeySequence() : seqs.first();
+}
+
+void AudioRouterApplet::setNextRoomShortcut(const QKeySequence &seq)
+{
+    if (!m_nextAction) return;
+    KGlobalAccel::self()->setShortcut(m_nextAction, { seq }, KGlobalAccel::NoAutoloading);
+    emit nextRoomShortcutChanged();
+}
+
+QKeySequence AudioRouterApplet::prevRoomShortcut() const
+{
+    if (!m_prevAction) return QKeySequence();
+    const auto seqs = KGlobalAccel::self()->shortcut(m_prevAction);
+    return seqs.isEmpty() ? QKeySequence() : seqs.first();
+}
+
+void AudioRouterApplet::setPrevRoomShortcut(const QKeySequence &seq)
+{
+    if (!m_prevAction) return;
+    KGlobalAccel::self()->setShortcut(m_prevAction, { seq }, KGlobalAccel::NoAutoloading);
+    emit prevRoomShortcutChanged();
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

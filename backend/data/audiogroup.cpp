@@ -39,13 +39,15 @@ AudioRoute AudioRoute::fromJson(const QJsonObject &obj)
 AudioGroup::AudioGroup()
     : id(QUuid::createUuid().toString(QUuid::WithoutBraces))
     , color(QStringLiteral("#4a90d9"))
+    , icon(QStringLiteral("audio-card"))
 {
 }
 
-AudioGroup::AudioGroup(const QString &name, const QString &color)
+AudioGroup::AudioGroup(const QString &name, const QString &color, const QString &icon)
     : id(QUuid::createUuid().toString(QUuid::WithoutBraces))
     , name(name)
     , color(color.isEmpty() ? QStringLiteral("#4a90d9") : color)
+    , icon(icon.isEmpty() ? QStringLiteral("audio-card") : icon)
 {
 }
 
@@ -55,6 +57,7 @@ QJsonObject AudioGroup::toJson() const
     obj[QStringLiteral("id")]    = id;
     obj[QStringLiteral("name")]  = name;
     obj[QStringLiteral("color")] = color;
+    obj[QStringLiteral("icon")]  = icon;
     obj[QStringLiteral("active")] = active;
 
     QJsonArray routeArray;
@@ -71,6 +74,7 @@ AudioGroup AudioGroup::fromJson(const QJsonObject &obj)
     group.id    = obj[QStringLiteral("id")].toString();
     group.name  = obj[QStringLiteral("name")].toString();
     group.color = obj[QStringLiteral("color")].toString(QStringLiteral("#4a90d9"));
+    group.icon  = obj[QStringLiteral("icon")].toString(QStringLiteral("audio-card"));
     group.active = obj[QStringLiteral("active")].toBool(false);
 
     const auto routes = obj[QStringLiteral("routes")].toArray();

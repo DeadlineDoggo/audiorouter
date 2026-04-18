@@ -18,6 +18,7 @@ public:
         IdRole = Qt::UserRole + 1,
         NameRole,
         ColorRole,
+        IconRole,
         ActiveRole,
         RouteCountRole
     };
@@ -30,11 +31,13 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     // ── Invokable from QML ──────────────────────────────────────────────
-    Q_INVOKABLE void    addGroup(const QString &name, const QString &color);
+    Q_INVOKABLE void    addGroup(const QString &name, const QString &color, const QString &icon = QStringLiteral("audio-card"));
     Q_INVOKABLE void    removeGroup(int row);
+    Q_INVOKABLE void    moveGroup(int from, int to);
     Q_INVOKABLE void    toggleActive(int row);
     Q_INVOKABLE QString groupId(int row) const;
     Q_INVOKABLE bool    isGroupActive(int row) const;
+    Q_INVOKABLE void    updateGroup(int row, const QString &name, const QString &color, const QString &icon);
 
     /// Set active without toggle; emits dataChanged from within the model.
     void setGroupActive(int row, bool active);

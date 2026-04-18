@@ -33,11 +33,13 @@ struct AudioGroup {
     QString id;
     QString name;
     QString color;
+    QString icon;
     bool active = false;
     QVector<AudioRoute> routes;
 
     AudioGroup();
-    explicit AudioGroup(const QString &name, const QString &color = QStringLiteral("#4a90d9"));
+    explicit AudioGroup(const QString &name, const QString &color = QStringLiteral("#4a90d9"),
+                        const QString &icon = QStringLiteral("audio-card"));
 
     QJsonObject toJson() const;
     static AudioGroup fromJson(const QJsonObject &obj);

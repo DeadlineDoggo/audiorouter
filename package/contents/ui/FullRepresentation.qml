@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.kde.kquickcontrols as KQuickControls
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.plasma.extras as PlasmaExtras
 import org.kde.plasma.plasmoid
@@ -20,6 +21,9 @@ PlasmaExtras.Representation {
     readonly property var sinkInputModel: Plasmoid.sinkInputModel ?? null
 
     property int selectedRoomIndex: -1
+
+    // ── Room edit mode ──────────────────────────────────────────────
+    property int editingRoomIndex: -1   // -1 = create mode, >= 0 = editing that row
 
     // ── Connection management ───────────────────────────────────────
     // Each link is { from: "type:name", to: "type:name", color: "#hex" }
@@ -134,12 +138,18 @@ PlasmaExtras.Representation {
         return false
     }
 
-    // Get the group color for a connected component (or pick new one)
+    // Get the group color for a connected component (or pick new one).
+    // Prefers the sink's established color so all wires to the same sink share one color.
     function getGroupColorForLink(fromKey, toKey) {
-        var c1 = findGroupColor(fromKey)
-        var c2 = findGroupColor(toKey)
-        if (c1 !== "") return c1
-        if (c2 !== "") return c2
+        var sinkKey = toKey.indexOf("sink:") === 0 ? toKey
+                    : fromKey.indexOf("sink:") === 0 ? fromKey : ""
+        if (sinkKey !== "") {
+            var sc = findGroupColor(sinkKey)
+            if (sc !== "") return sc
+        }
+        var srcKey = sinkKey === toKey ? fromKey : toKey
+        var ic = findGroupColor(srcKey)
+        if (ic !== "") return ic
         return pickColor()
     }
 
@@ -328,12 +338,12 @@ PlasmaExtras.Representation {
             }
         }
 
+        var sinkColorMap = {}
         for (var i = 0; i < fullRoot.routeModel.count; i++) {
             var ridx = fullRoot.routeModel.index(i, 0)
             var sourceKey   = fullRoot.routeModel.data(ridx, Qt.UserRole + 1) // SourceAppRole
             var outputNames = fullRoot.routeModel.data(ridx, Qt.UserRole + 2) // OutputNamesRole
             if (!outputNames || !outputNames.length) continue
-            var color = pickColor()
 
             // Parse "appName\tordinal" or legacy plain "appName"
             var tabPos = sourceKey.indexOf("\t")
@@ -346,23 +356,32 @@ PlasmaExtras.Representation {
                 // Per-stream route: connect this specific stream
                 var fromKey = "input:" + streams[ordinal]
                 var meta = streamMetaForKey(fromKey)
-                for (var k = 0; k < outputNames.length; k++)
-                    newConns.push({ from: fromKey, to: "sink:" + outputNames[k], color: color,
+                for (var k = 0; k < outputNames.length; k++) {
+                    var sk = "sink:" + outputNames[k]
+                    if (!sinkColorMap[sk]) sinkColorMap[sk] = pickColor()
+                    newConns.push({ from: fromKey, to: sk, color: sinkColorMap[sk],
                                     appName: meta.appName, mediaName: meta.mediaName })
+                }
             } else if (ordinal < 0 && streams.length > 0) {
                 // Legacy route (no ordinal): connect ALL streams of this app
                 for (var j2 = 0; j2 < streams.length; j2++) {
                     var fk2 = "input:" + streams[j2]
                     var meta2 = streamMetaForKey(fk2)
-                    for (var k2 = 0; k2 < outputNames.length; k2++)
-                        newConns.push({ from: fk2, to: "sink:" + outputNames[k2], color: color,
+                    for (var k2 = 0; k2 < outputNames.length; k2++) {
+                        var sk2 = "sink:" + outputNames[k2]
+                        if (!sinkColorMap[sk2]) sinkColorMap[sk2] = pickColor()
+                        newConns.push({ from: fk2, to: sk2, color: sinkColorMap[sk2],
                                         appName: meta2.appName, mediaName: meta2.mediaName })
+                    }
                 }
             } else {
                 // Stream not currently available — store as app: placeholder
-                for (var k3 = 0; k3 < outputNames.length; k3++)
-                    newConns.push({ from: "app:" + baseAppName, to: "sink:" + outputNames[k3], color: color,
+                for (var k3 = 0; k3 < outputNames.length; k3++) {
+                    var sk3 = "sink:" + outputNames[k3]
+                    if (!sinkColorMap[sk3]) sinkColorMap[sk3] = pickColor()
+                    newConns.push({ from: "app:" + baseAppName, to: sk3, color: sinkColorMap[sk3],
                                     appName: baseAppName, mediaName: "" })
+                }
             }
         }
         connections = newConns
@@ -565,7 +584,13 @@ PlasmaExtras.Representation {
                     Layout.fillWidth: true
                     text: "  + New Room"
                     icon.name: "list-add"
-                    onClicked: addRoomOverlay.visible = true
+                    onClicked: {
+                        fullRoot.editingRoomIndex = -1
+                        roomNameField.text = ""
+                        addRoomCol.selectedColor = "#4a90d9"
+                        addRoomCol.selectedIcon = "audio-card"
+                        addRoomOverlay.visible = true
+                    }
 
                     background: Rectangle {
                         radius: Kirigami.Units.smallSpacing
@@ -624,6 +649,45 @@ PlasmaExtras.Representation {
                                 anchors.margins: Kirigami.Units.smallSpacing
                                 spacing: Kirigami.Units.smallSpacing
 
+                                // Drag handle (grip icon)
+                                Item {
+                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                    Layout.fillHeight: true
+
+                                    Kirigami.Icon {
+                                        source: "handle-sort"
+                                        width: Kirigami.Units.iconSizes.small
+                                        height: Kirigami.Units.iconSizes.small
+                                        anchors.centerIn: parent
+                                        isMask: true
+                                        opacity: handleDragArea.containsMouse || handleDragArea.pressed ? 0.8
+                                               : roomMa.containsMouse || fullRoot.selectedRoomIndex === index ? 0.4 : 0
+                                    }
+
+                                    MouseArea {
+                                        id: handleDragArea
+                                        anchors.fill: parent
+                                        cursorShape: Qt.SizeVerCursor
+                                        hoverEnabled: true
+                                        property int dragFromIdx: -1
+
+                                        onPressed: function(mouse) {
+                                            dragFromIdx = index
+                                            mouse.accepted = true
+                                        }
+                                        onPositionChanged: function(mouse) {
+                                            if (!pressed || dragFromIdx < 0) return
+                                            var contentPos = mapToItem(roomListView.contentItem, mouse.x, mouse.y)
+                                            var targetIdx = roomListView.indexAt(contentPos.x, contentPos.y)
+                                            if (targetIdx >= 0 && targetIdx !== dragFromIdx) {
+                                                fullRoot.groupModel.moveGroup(dragFromIdx, targetIdx)
+                                                dragFromIdx = targetIdx
+                                            }
+                                        }
+                                        onReleased: { dragFromIdx = -1 }
+                                    }
+                                }
+
                                 // Color bar
                                 Rectangle {
                                     width: 4
@@ -635,7 +699,7 @@ PlasmaExtras.Representation {
 
                                 // Room icon
                                 Kirigami.Icon {
-                                    source: "audio-card"
+                                    source: model.groupIcon || "audio-card"
                                     Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
                                     Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
                                     opacity: model.groupActive ? 1.0 : 0.5
@@ -688,6 +752,17 @@ PlasmaExtras.Representation {
                                     QQC2.Menu {
                                         id: roomContextMenu
                                         QQC2.MenuItem {
+                                            text: "Edit"
+                                            icon.name: "document-edit"
+                                            onTriggered: {
+                                                fullRoot.editingRoomIndex = index
+                                                roomNameField.text = model.groupName
+                                                addRoomCol.selectedColor = model.groupColor || "#4a90d9"
+                                                addRoomCol.selectedIcon = model.groupIcon || "audio-card"
+                                                addRoomOverlay.visible = true
+                                            }
+                                        }
+                                        QQC2.MenuItem {
                                             text: "Remove"
                                             icon.name: "edit-delete"
                                             onTriggered: {
@@ -720,15 +795,6 @@ PlasmaExtras.Representation {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
-
-                    PlasmaComponents.ToolButton {
-                        icon.name: "document-save"
-                        text: "Save"
-                        display: QQC2.AbstractButton.TextBesideIcon
-                        onClicked: {
-                            if (fullRoot.groupModel) fullRoot.groupModel.save()
-                        }
-                    }
 
                     Item { Layout.fillWidth: true }
 
@@ -1508,6 +1574,14 @@ PlasmaExtras.Representation {
                 spacing: Kirigami.Units.smallSpacing * 2
 
                 property color selectedColor: "#4a90d9"
+                property string selectedIcon: "audio-card"
+
+                readonly property var iconChoices: [
+                    "audio-card", "audio-headphones", "audio-speakers",
+                    "audio-volume-high", "multimedia-player", "audio-headset",
+                    "applications-multimedia", "audio-input-microphone",
+                    "media-playback-start", "media-record"
+                ]
 
                 function createRoomAction() {
                     if (!fullRoot.groupModel) {
@@ -1517,15 +1591,23 @@ PlasmaExtras.Representation {
                     var name = roomNameField.text.trim()
                     if (name.length === 0) return
                     var colorStr = "" + addRoomCol.selectedColor
-                    fullRoot.groupModel.addGroup(name, colorStr)
+                    var iconStr = addRoomCol.selectedIcon
+
+                    if (fullRoot.editingRoomIndex >= 0) {
+                        fullRoot.groupModel.updateGroup(fullRoot.editingRoomIndex, name, colorStr, iconStr)
+                    } else {
+                        fullRoot.groupModel.addGroup(name, colorStr, iconStr)
+                    }
                     roomNameField.text = ""
                     addRoomCol.selectedColor = "#4a90d9"
+                    addRoomCol.selectedIcon = "audio-card"
+                    fullRoot.editingRoomIndex = -1
                     addRoomOverlay.visible = false
                 }
 
                 PlasmaExtras.Heading {
                     level: 3
-                    text: "New Room"
+                    text: fullRoot.editingRoomIndex >= 0 ? "Edit Room" : "New Room"
                 }
 
                 PlasmaComponents.TextField {
@@ -1537,33 +1619,107 @@ PlasmaExtras.Representation {
                     focus: addRoomOverlay.visible
                 }
 
-                // Color picker row
-                RowLayout {
+                // Color + Icon rows — outer GridLayout for label alignment
+                GridLayout {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing * 2
+                    columns: 2
+                    columnSpacing: Kirigami.Units.smallSpacing
+                    rowSpacing: Kirigami.Units.smallSpacing * 2
 
+                    // ── Color row ──────────────────────────────────
                     PlasmaComponents.Label {
                         text: "Color:"
                         opacity: 0.8
                         font.bold: true
+                        Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                     }
 
-                    Repeater {
-                        model: ["#4a90d9", "#50c878", "#e74c3c", "#f39c12", "#9b59b6", "#1abc9c"]
-                        delegate: Rectangle {
-                            width: 28; height: 28; radius: 14
-                            color: modelData
-                            border.width: ("" + addRoomCol.selectedColor) === modelData ? 3 : 1
-                            border.color: ("" + addRoomCol.selectedColor) === modelData
-                                          ? "white"
-                                          : Qt.rgba(Kirigami.Theme.textColor.r,
-                                                    Kirigami.Theme.textColor.g,
-                                                    Kirigami.Theme.textColor.b, 0.2)
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
 
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: addRoomCol.selectedColor = modelData
+                        Repeater {
+                            model: ["#4a90d9", "#50c878", "#e74c3c", "#f39c12", "#9b59b6", "#1abc9c"]
+                            delegate: Rectangle {
+                                width: 24; height: 24; radius: 12
+                                color: modelData
+                                border.width: ("" + addRoomCol.selectedColor).toLowerCase() === modelData ? 3 : 1
+                                border.color: ("" + addRoomCol.selectedColor).toLowerCase() === modelData
+                                              ? "white"
+                                              : Qt.rgba(Kirigami.Theme.textColor.r,
+                                                        Kirigami.Theme.textColor.g,
+                                                        Kirigami.Theme.textColor.b, 0.2)
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: addRoomCol.selectedColor = modelData
+                                }
+                            }
+                        }
+
+                        KQuickControls.ColorButton {
+                            id: roomColorButton
+                            color: addRoomCol.selectedColor
+                            dialogTitle: "Choose Room Color"
+                            showAlphaChannel: true
+                            onColorChanged: addRoomCol.selectedColor = color
+                            Layout.preferredWidth: 24
+                            Layout.preferredHeight: 24
+                        }
+
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    // ── Icon row ───────────────────────────────────
+                    PlasmaComponents.Label {
+                        text: "Icon:"
+                        opacity: 0.8
+                        font.bold: true
+                        Layout.alignment: Qt.AlignTop | Qt.AlignRight
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 3
+                        topPadding: Kirigami.Units.smallSpacing
+                    }
+
+                    // Use GridLayout (not Grid) so the Layout engine handles sizing correctly
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 5
+                        columnSpacing: Kirigami.Units.smallSpacing
+                        rowSpacing: Kirigami.Units.smallSpacing
+
+                        Repeater {
+                            model: addRoomCol.iconChoices
+                            delegate: Rectangle {
+                                Layout.preferredWidth: 30
+                                Layout.preferredHeight: 30
+                                radius: Kirigami.Units.smallSpacing
+                                color: addRoomCol.selectedIcon === modelData
+                                       ? Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                                 Kirigami.Theme.highlightColor.g,
+                                                 Kirigami.Theme.highlightColor.b, 0.3)
+                                       : (iconMa.containsMouse
+                                          ? Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                                    Kirigami.Theme.highlightColor.g,
+                                                    Kirigami.Theme.highlightColor.b, 0.12)
+                                          : "transparent")
+                                border.width: addRoomCol.selectedIcon === modelData ? 2 : 0
+                                border.color: Kirigami.Theme.highlightColor
+
+                                Kirigami.Icon {
+                                    anchors.centerIn: parent
+                                    source: modelData
+                                    width: Kirigami.Units.iconSizes.small
+                                    height: Kirigami.Units.iconSizes.small
+                                }
+
+                                MouseArea {
+                                    id: iconMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: addRoomCol.selectedIcon = modelData
+                                }
                             }
                         }
                     }
@@ -1580,16 +1736,21 @@ PlasmaExtras.Representation {
                         onClicked: {
                             addRoomOverlay.visible = false
                             roomNameField.text = ""
+                            fullRoot.editingRoomIndex = -1
                         }
                     }
 
                     Item { Layout.fillWidth: true }
 
                     PlasmaComponents.Button {
-                        text: "  + Create"
-                        icon.name: "list-add"
+                        text: fullRoot.editingRoomIndex >= 0 ? "  Save" : "  + Create"
+                        icon.name: fullRoot.editingRoomIndex >= 0 ? "document-save" : "list-add"
                         enabled: roomNameField.text.trim().length > 0
                         onClicked: addRoomCol.createRoomAction()
+                        leftPadding: Kirigami.Units.largeSpacing
+                        rightPadding: Kirigami.Units.largeSpacing
+                        topPadding: Kirigami.Units.smallSpacing
+                        bottomPadding: Kirigami.Units.smallSpacing
 
                         background: Rectangle {
                             radius: Kirigami.Units.smallSpacing
@@ -1599,14 +1760,14 @@ PlasmaExtras.Representation {
                         contentItem: RowLayout {
                             spacing: Kirigami.Units.smallSpacing
                             Kirigami.Icon {
-                                source: "list-add"
+                                source: fullRoot.editingRoomIndex >= 0 ? "document-save" : "list-add"
                                 Layout.preferredWidth: Kirigami.Units.iconSizes.small
                                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
                                 isMask: true
                                 Kirigami.Theme.textColor: "white"
                             }
                             PlasmaComponents.Label {
-                                text: "Create"
+                                text: fullRoot.editingRoomIndex >= 0 ? "Save" : "Create"
                                 font.bold: true
                                 color: "white"
                             }
@@ -1631,6 +1792,20 @@ PlasmaExtras.Representation {
                 }
             }
         }
+        // Keep selectedRoomIndex correct after drag-reorder
+        function onRowsMoved(parent, start, end, destination, newRow) {
+            var from = start
+            var to = newRow > start ? newRow - 1 : newRow
+            if (fullRoot.selectedRoomIndex === from) {
+                fullRoot.selectedRoomIndex = to
+            } else if (from < to) {
+                if (fullRoot.selectedRoomIndex > from && fullRoot.selectedRoomIndex <= to)
+                    fullRoot.selectedRoomIndex--
+            } else if (from > to) {
+                if (fullRoot.selectedRoomIndex >= to && fullRoot.selectedRoomIndex < from)
+                    fullRoot.selectedRoomIndex++
+            }
+        }
     }
 
     // ── Re-apply routing when new streams appear (debounced from C++) ──
@@ -1638,6 +1813,12 @@ PlasmaExtras.Representation {
         target: Plasmoid
         function onReapplyRequested() {
             fullRoot.handleNewStreams()
+        }
+        function onNextRoomActivated() {
+            fullRoot.selectNextRoom()
+        }
+        function onPrevRoomActivated() {
+            fullRoot.selectPrevRoom()
         }
     }
 

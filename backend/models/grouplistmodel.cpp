@@ -25,6 +25,7 @@ QVariant GroupListModel::data(const QModelIndex &index, int role) const
     case IdRole:         return group.id;
     case NameRole:       return group.name;
     case ColorRole:      return group.color;
+    case IconRole:       return group.icon;
     case ActiveRole:     return group.active;
     case RouteCountRole: return static_cast<int>(group.routes.size());
     case Qt::DisplayRole: return group.name;
@@ -38,6 +39,7 @@ QHash<int, QByteArray> GroupListModel::roleNames() const
         { IdRole,         "groupId"    },
         { NameRole,       "groupName"  },
         { ColorRole,      "groupColor" },
+        { IconRole,       "groupIcon"  },
         { ActiveRole,     "groupActive"},
         { RouteCountRole, "routeCount" }
     };
@@ -47,11 +49,11 @@ QHash<int, QByteArray> GroupListModel::roleNames() const
 // QML-callable operations
 // ═══════════════════════════════════════════════════════════════════════════
 
-void GroupListModel::addGroup(const QString &name, const QString &color)
+void GroupListModel::addGroup(const QString &name, const QString &color, const QString &icon)
 {
     const int n = static_cast<int>(m_groups.size());
     beginInsertRows({}, n, n);
-    m_groups.append(AudioGroup(name, color));
+    m_groups.append(AudioGroup(name, color, icon));
     endInsertRows();
     emit countChanged();
     save();
@@ -64,6 +66,30 @@ void GroupListModel::removeGroup(int row)
     m_groups.removeAt(row);
     endRemoveRows();
     emit countChanged();
+    save();
+}
+
+void GroupListModel::updateGroup(int row, const QString &name, const QString &color, const QString &icon)
+{
+    if (row < 0 || row >= m_groups.size()) return;
+    m_groups[row].name  = name;
+    m_groups[row].color = color;
+    m_groups[row].icon  = icon.isEmpty() ? QStringLiteral("audio-card") : icon;
+    emit dataChanged(index(row), index(row), { NameRole, ColorRole, IconRole });
+    emit groupChanged(row);
+    save();
+}
+
+void GroupListModel::moveGroup(int from, int to)
+{
+    if (from < 0 || from >= m_groups.size()) return;
+    if (to < 0 || to >= m_groups.size()) return;
+    if (from == to) return;
+    // beginMoveRows destinationChild: row *before* which items are inserted
+    const int dest = to > from ? to + 1 : to;
+    if (!beginMoveRows({}, from, from, {}, dest)) return;
+    m_groups.move(from, to);
+    endMoveRows();
     save();
 }
 
