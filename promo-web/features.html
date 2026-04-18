@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Features — SoundRoot</title>
+  <meta name="description" content="Full feature breakdown of SoundRoot: audio rooms, visual wire routing, many-to-many, global shortcuts, PipeWire integration."/>
+  <link rel="icon" type="image/png" href="assets/icon.png" />
+  <script>(function(){const s=localStorage.getItem("sr-theme"),d=window.matchMedia("(prefers-color-scheme:dark)").matches;document.documentElement.classList.toggle("dark",s?s==="dark":d);document.documentElement.classList.toggle("light",s?s==="light":!d);})()</script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={darkMode:"class",theme:{extend:{fontFamily:{display:["Space Grotesk","sans-serif"],mono:["IBM Plex Mono","monospace"]}}}}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="font-display antialiased" style="background:var(--sr-bg-base);color:var(--sr-fg-primary)">
+  <div class="noise"></div>
+
+  <header style="border-bottom:1px solid var(--sr-border-subtle);backdrop-filter:blur(20px);background:color-mix(in srgb,var(--sr-bg-base) 70%,transparent)" class="sticky top-0 z-40">
+    <div class="mx-auto max-w-5xl px-5 h-14 flex items-center justify-between gap-4">
+      <a href="index.html" class="flex items-center gap-2.5 shrink-0">
+        <img class="h-7 w-7 rounded-lg" style="border:1px solid var(--sr-border-strong)" src="assets/icon.png" alt="SoundRoot" />
+        <span class="text-base font-bold tracking-wide">SoundRoot</span>
+      </a>
+      <nav class="hidden md:flex items-center gap-1 text-sm font-medium" style="color:var(--sr-fg-secondary)">
+        <a href="features.html" class="px-3 py-1.5 rounded-md font-semibold" style="background:var(--sr-accent-subtle);color:var(--sr-accent)">Features</a>
+        <a href="install.html" class="px-3 py-1.5 rounded-md" onmouseover="this.style.background='var(--sr-accent-subtle)'" onmouseout="this.style.background=''">Install</a>
+        <a href="index.html" class="px-3 py-1.5 rounded-md" onmouseover="this.style.background='var(--sr-accent-subtle)'" onmouseout="this.style.background=''">Home</a>
+      </nav>
+      <div class="flex items-center gap-2">
+        <button id="themeToggle" class="h-8 px-3 rounded-full text-xs font-mono uppercase tracking-widest" style="border:1px solid var(--sr-border-strong);color:var(--sr-fg-secondary)">Dark</button>
+        <a href="install.html" class="h-8 px-4 rounded-full text-white text-sm font-semibold flex items-center" style="background:var(--sr-accent)">Install</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- PAGE HERO -->
+  <section class="mx-auto max-w-5xl px-5 pt-16 pb-12 text-center">
+    <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">Full feature reference</p>
+    <h1 class="text-4xl md:text-6xl font-bold leading-tight">What SoundRoot can do.</h1>
+    <p class="mt-4 max-w-2xl mx-auto text-lg" style="color:var(--sr-fg-secondary)">Everything from the big ideas to the small details that make daily use feel effortless.</p>
+  </section>
+
+  <!-- WIRE COLOURS -->
+  <section class="mx-auto max-w-5xl px-5 pb-6">
+    <div class="grid grid-cols-10 gap-1.5 rounded-2xl overflow-hidden p-3" style="background:var(--sr-bg-surface);border:1px solid var(--sr-border-subtle)">
+      <div class="col-span-10 text-[10px] font-mono mb-1" style="color:var(--sr-fg-muted)">10 wire colour palette</div>
+      <div class="h-7 rounded-lg" style="background:var(--sr-wire-1)" title="Wire 1"></div>
+      <div class="h-7 rounded-lg" style="background:var(--sr-wire-2)" title="Wire 2"></div>
+      <div class="h-7 rounded-lg" style="background:var(--sr-wire-3)" title="Wire 3"></div>
+      <div class="h-7 rounded-lg" style="background:var(--sr-wire-4)" title="Wire 4"></div>
+      <div class="h-7 rounded-lg" style="background:var(--sr-wire-5)" title="Wire 5"></div>
+      <div class="h-7 rounded-lg" style="background:var(--sr-wire-6)" title="Wire 6"></div>
+      <div class="h-7 rounded-lg" style="background:var(--sr-wire-7)" title="Wire 7"></div>
+      <div class="h-7 rounded-lg" style="background:var(--sr-wire-8)" title="Wire 8"></div>
+      <div class="h-7 rounded-lg" style="background:var(--sr-wire-9)" title="Wire 9"></div>
+      <div class="h-7 rounded-lg" style="background:var(--sr-wire-10)" title="Wire 10"></div>
+    </div>
+  </section>
+
+  <!-- FEATURE DEEP DIVES -->
+  <section class="mx-auto max-w-5xl px-5 pb-24 space-y-6">
+
+    <!-- Audio Rooms -->
+    <div class="rounded-2xl overflow-hidden" style="border:1px solid var(--sr-border-subtle)">
+      <div class="grid md:grid-cols-2">
+        <div class="p-8 flex flex-col justify-center" style="background:var(--sr-bg-surface)">
+          <p class="font-mono text-[10px] tracking-widest uppercase mb-2" style="color:var(--sr-accent)">01 — Audio Rooms</p>
+          <h2 class="text-2xl font-bold mb-3">Named presets that remember everything.</h2>
+          <p class="text-sm leading-relaxed mb-4" style="color:var(--sr-fg-secondary)">Each room stores its own complete routing configuration — which apps go to which outputs, at what volume, in what order. Switching a room is atomic: all routes change at once, instantly.</p>
+          <ul class="space-y-1.5 text-sm" style="color:var(--sr-fg-secondary)">
+            <li class="flex gap-2"><span style="color:var(--sr-green)">✓</span> Custom name, colour, and icon per room</li>
+            <li class="flex gap-2"><span style="color:var(--sr-green)">✓</span> Unlimited rooms</li>
+            <li class="flex gap-2"><span style="color:var(--sr-green)">✓</span> Drag to reorder rooms in place</li>
+            <li class="flex gap-2"><span style="color:var(--sr-green)">✓</span> Persists across KDE sessions and reboots</li>
+          </ul>
+        </div>
+        <img class="w-full h-64 md:h-auto object-cover" src="https://picsum.photos/seed/feat-rooms/720/480" alt="Audio rooms sidebar" />
+      </div>
+    </div>
+
+    <!-- Visual Wire Routing -->
+    <div class="rounded-2xl overflow-hidden" style="border:1px solid var(--sr-border-subtle)">
+      <div class="grid md:grid-cols-2">
+        <img class="w-full h-64 md:h-auto object-cover order-last md:order-first" src="https://picsum.photos/seed/feat-wires/720/480" alt="Connection wires" />
+        <div class="p-8 flex flex-col justify-center" style="background:var(--sr-bg-surface)">
+          <p class="font-mono text-[10px] tracking-widest uppercase mb-2" style="color:var(--sr-accent)">02 — Visual Wire Routing</p>
+          <h2 class="text-2xl font-bold mb-3">See your audio graph at a glance.</h2>
+          <p class="text-sm leading-relaxed mb-4" style="color:var(--sr-fg-secondary)">A canvas of source nodes (apps) on the left and sink nodes (devices) on the right, connected by colour-coded bezier wires. Each output device gets a unique colour so you instantly know where every app is routed.</p>
+          <ul class="space-y-1.5 text-sm" style="color:var(--sr-fg-secondary)">
+            <li class="flex gap-2"><span style="color:var(--sr-green)">✓</span> Sink-keyed wire colours (all wires to the same output share a colour)</li>
+            <li class="flex gap-2"><span style="color:var(--sr-green)">✓</span> Drag from source to sink to create a route</li>
+            <li class="flex gap-2"><span style="color:var(--sr-green)">✓</span> Live stream names from PipeWire</li>
+            <li class="flex gap-2"><span style="color:var(--sr-green)">✓</span> Per-stream ordinal routing with unique route IDs</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Many-to-Many -->
+    <div class="rounded-2xl overflow-hidden" style="border:1px solid var(--sr-border-subtle)">
+      <div class="grid md:grid-cols-2">
+        <div class="p-8 flex flex-col justify-center" style="background:var(--sr-bg-surface)">
+          <p class="font-mono text-[10px] tracking-widest uppercase mb-2" style="color:var(--sr-accent)">03 — Many-to-Many Routing</p>
+          <h2 class="text-2xl font-bold mb-3">No artificial limits.</h2>
+          <p class="text-sm leading-relaxed mb-4" style="color:var(--sr-fg-secondary)">Route one app to multiple outputs, multiple apps to one output, or build any N:M graph you need. PipeWire handles the mixing; SoundRoot handles the configuration.</p>
+          <ul class="space-y-1.5 text-sm" style="color:var(--sr-fg-secondary)">
+            <li class="flex gap-2"><span style="color:var(--sr-green)">✓</span> One source → many sinks simultaneously</li>
+            <li class="flex gap-2"><span style="color:var(--sr-green)">✓</span> Many sources → one sink (mixed by PipeWire)</li>
+            <li class="flex gap-2"><span style="color:var(--sr-green)">✓</span> Per-route volume sliders</li>
+            <li class="flex gap-2"><span style="color:var(--sr-green)">✓</span> Delete individual routes without clearing the room</li>
+          </ul>
+        </div>
+        <img class="w-full h-64 md:h-auto object-cover" src="https://picsum.photos/seed/feat-ntom/720/480" alt="Many to many routing" />
+      </div>
+    </div>
+
+    <!-- Global Shortcuts -->
+    <div class="rounded-2xl overflow-hidden" style="border:1px solid var(--sr-border-subtle)">
+      <div class="grid md:grid-cols-2">
+        <img class="w-full h-64 md:h-auto object-cover order-last md:order-first" src="https://picsum.photos/seed/feat-shortcuts/720/480" alt="KDE Keyboard Shortcuts config" />
+        <div class="p-8 flex flex-col justify-center" style="background:var(--sr-bg-surface)">
+          <p class="font-mono text-[10px] tracking-widest uppercase mb-2" style="color:var(--sr-accent)">04 — Global Shortcuts</p>
+          <h2 class="text-2xl font-bold mb-3">Switch rooms without lifting a hand.</h2>
+          <p class="text-sm leading-relaxed mb-4" style="color:var(--sr-fg-secondary)">Three configurable shortcuts live in KDE's native Keyboard Shortcuts panel: open the widget, next room, and previous room. They work globally — in games, full-screen apps, wherever.</p>
+          <div class="space-y-2 text-sm font-mono">
+            <div class="flex items-center gap-3" style="color:var(--sr-fg-secondary)">
+              <kbd class="kbd">Meta+S</kbd><span>Open SoundRoot</span>
+            </div>
+            <div class="flex items-center gap-3" style="color:var(--sr-fg-secondary)">
+              <kbd class="kbd">Ctrl+Alt+→</kbd><span>Next Room</span>
+            </div>
+            <div class="flex items-center gap-3" style="color:var(--sr-fg-secondary)">
+              <kbd class="kbd">Ctrl+Alt+←</kbd><span>Previous Room</span>
+            </div>
+            <p class="text-[11px] mt-1" style="color:var(--sr-fg-muted)">(fully rebindable in System Settings → Shortcuts)</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PipeWire Integration -->
+    <div class="rounded-2xl p-8" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+      <div class="max-w-2xl">
+        <p class="font-mono text-[10px] tracking-widest uppercase mb-2" style="color:var(--sr-accent)">05 — PipeWire Native</p>
+        <h2 class="text-2xl font-bold mb-3">Built on PipeWire's real API.</h2>
+        <p class="text-sm leading-relaxed mb-6" style="color:var(--sr-fg-secondary)">SoundRoot talks to PipeWire via the PulseAudio compatibility layer for maximum device support while using PipeWire's own virtual-sink loopback links for low-latency multi-output. No wrappers, no scripts.</p>
+      </div>
+      <div class="grid sm:grid-cols-3 gap-3 text-sm">
+        <div class="rounded-xl p-4" style="background:var(--sr-bg-elevated);border:1px solid var(--sr-border-subtle)">
+          <p class="font-bold mb-1">Auto-discovery</p>
+          <p style="color:var(--sr-fg-secondary)">All PipeWire sinks and source outputs appear automatically — plug in a USB DAC and it shows up instantly.</p>
+        </div>
+        <div class="rounded-xl p-4" style="background:var(--sr-bg-elevated);border:1px solid var(--sr-border-subtle)">
+          <p class="font-bold mb-1">Live stream names</p>
+          <p style="color:var(--sr-fg-secondary)">App names, icons, and stream metadata come straight from PipeWire — no custom labelling needed.</p>
+        </div>
+        <div class="rounded-xl p-4" style="background:var(--sr-bg-elevated);border:1px solid var(--sr-border-subtle)">
+          <p class="font-bold mb-1">PA-compatible</p>
+          <p style="color:var(--sr-fg-secondary)">Works alongside pavucontrol and any other PulseAudio-protocol tool — no conflicts.</p>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- CTA -->
+  <section style="background:var(--sr-bg-surface);border-top:1px solid var(--sr-border-subtle)" class="py-16 text-center">
+    <div class="mx-auto max-w-5xl px-5">
+      <h2 class="text-3xl font-bold mb-4">Ready to try it?</h2>
+      <div class="flex flex-wrap gap-3 justify-center">
+        <a href="install.html" class="rounded-full text-white px-8 py-3 text-sm font-bold" style="background:var(--sr-accent);box-shadow:0 8px 40px rgba(74,144,226,.35)">Install SoundRoot</a>
+        <a href="index.html" class="rounded-full px-8 py-3 text-sm font-semibold" style="border:1px solid var(--sr-border-strong)">Back to Home</a>
+      </div>
+    </div>
+  </section>
+
+  <footer style="border-top:1px solid var(--sr-border-subtle)" class="py-6 text-center text-xs font-mono" style="color:var(--sr-fg-muted)">
+    <a href="index.html" class="hover:underline mr-4">Home</a>
+    <a href="install.html" class="hover:underline mr-4">Install</a>
+    <a href="privacy-policy.html" class="hover:underline mr-4">Privacy</a>
+    <a href="terms-of-use.html" class="hover:underline">&copy; 2026 SoundRoot · MIT</a>
+  </footer>
+  <script src="nav.js"></script>
+</body>
+</html>

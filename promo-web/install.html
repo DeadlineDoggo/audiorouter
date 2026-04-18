@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Install — SoundRoot</title>
+  <meta name="description" content="Install SoundRoot on KDE Plasma 6 from the KDE Store or build from source using CMake."/>
+  <link rel="icon" type="image/png" href="assets/icon.png" />
+  <script>(function(){const s=localStorage.getItem("sr-theme"),d=window.matchMedia("(prefers-color-scheme:dark)").matches;document.documentElement.classList.toggle("dark",s?s==="dark":d);document.documentElement.classList.toggle("light",s?s==="light":!d);})()</script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={darkMode:"class",theme:{extend:{fontFamily:{display:["Space Grotesk","sans-serif"],mono:["IBM Plex Mono","monospace"]}}}}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="font-display antialiased" style="background:var(--sr-bg-base);color:var(--sr-fg-primary)">
+  <div class="noise"></div>
+
+  <header style="border-bottom:1px solid var(--sr-border-subtle);backdrop-filter:blur(20px);background:color-mix(in srgb,var(--sr-bg-base) 70%,transparent)" class="sticky top-0 z-40">
+    <div class="mx-auto max-w-5xl px-5 h-14 flex items-center justify-between gap-4">
+      <a href="index.html" class="flex items-center gap-2.5 shrink-0">
+        <img class="h-7 w-7 rounded-lg" style="border:1px solid var(--sr-border-strong)" src="assets/icon.png" alt="SoundRoot" />
+        <span class="text-base font-bold tracking-wide">SoundRoot</span>
+      </a>
+      <nav class="hidden md:flex items-center gap-1 text-sm font-medium" style="color:var(--sr-fg-secondary)">
+        <a href="features.html" class="px-3 py-1.5 rounded-md" onmouseover="this.style.background='var(--sr-accent-subtle)'" onmouseout="this.style.background=''">Features</a>
+        <a href="install.html" class="px-3 py-1.5 rounded-md font-semibold" style="background:var(--sr-accent-subtle);color:var(--sr-accent)">Install</a>
+        <a href="index.html" class="px-3 py-1.5 rounded-md" onmouseover="this.style.background='var(--sr-accent-subtle)'" onmouseout="this.style.background=''">Home</a>
+      </nav>
+      <div class="flex items-center gap-2">
+        <button id="themeToggle" class="h-8 px-3 rounded-full text-xs font-mono uppercase tracking-widest" style="border:1px solid var(--sr-border-strong);color:var(--sr-fg-secondary)">Dark</button>
+        <a href="https://github.com/" target="_blank" rel="noopener" class="h-8 px-4 rounded-full text-white text-sm font-semibold flex items-center" style="background:var(--sr-accent)">GitHub</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section class="mx-auto max-w-5xl px-5 pt-16 pb-10 text-center">
+    <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">Installation guide</p>
+    <h1 class="text-4xl md:text-6xl font-bold leading-tight">Get SoundRoot running.</h1>
+    <p class="mt-4 max-w-xl mx-auto" style="color:var(--sr-fg-secondary)">Two options: KDE Store (easiest) or build from source (for developers).</p>
+  </section>
+
+  <div class="mx-auto max-w-5xl px-5 pb-24 space-y-10">
+
+    <!-- REQUIREMENTS -->
+    <div class="rounded-2xl p-6 md:p-8" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+      <h2 class="text-xl font-bold mb-4">Requirements</h2>
+      <table class="w-full text-sm">
+        <thead>
+          <tr style="border-bottom:1px solid var(--sr-border-subtle)">
+            <th class="py-2 text-left font-semibold">Component</th>
+            <th class="py-2 text-left font-semibold">Required version</th>
+            <th class="py-2 text-left font-semibold">Notes</th>
+          </tr>
+        </thead>
+        <tbody style="color:var(--sr-fg-secondary)">
+          <tr style="border-bottom:1px solid var(--sr-border-subtle)">
+            <td class="py-2.5 font-mono text-sm">KDE Plasma</td>
+            <td class="py-2.5">6.0+</td>
+            <td class="py-2.5">Plasma 5 not supported</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--sr-border-subtle)">
+            <td class="py-2.5 font-mono text-sm">Qt</td>
+            <td class="py-2.5">6.4+</td>
+            <td class="py-2.5">Ships with Plasma 6</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--sr-border-subtle)">
+            <td class="py-2.5 font-mono text-sm">PipeWire</td>
+            <td class="py-2.5">0.3 / 1.x</td>
+            <td class="py-2.5">With pipewire-pulse running</td>
+          </tr>
+          <tr>
+            <td class="py-2.5 font-mono text-sm">CMake (build only)</td>
+            <td class="py-2.5">3.20+</td>
+            <td class="py-2.5">Only needed for source builds</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- OPTION A: KDE STORE -->
+    <div class="rounded-2xl overflow-hidden" style="border:1px solid var(--sr-border-subtle)">
+      <div class="px-6 py-4 flex items-center gap-3" style="background:var(--sr-bg-elevated);border-bottom:1px solid var(--sr-border-subtle)">
+        <span class="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0" style="background:var(--sr-accent)">A</span>
+        <div>
+          <p class="font-bold">KDE Store (recommended)</p>
+          <p class="text-xs" style="color:var(--sr-fg-muted)">Easiest — one-click install via KDE Get New Widgets</p>
+        </div>
+        <span class="ml-auto text-xs font-mono px-2 py-0.5 rounded-full" style="background:var(--sr-accent-subtle);color:var(--sr-accent)">Easiest</span>
+      </div>
+      <div class="p-6 md:p-8 space-y-4" style="background:var(--sr-bg-surface)">
+        <div class="flex gap-4">
+          <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5" style="background:var(--sr-accent-subtle);color:var(--sr-accent)">1</div>
+          <div>
+            <p class="font-semibold">Right-click your panel → Add Widgets</p>
+            <p class="text-sm mt-0.5" style="color:var(--sr-fg-secondary)">Or open System Settings → Plasma Widgets</p>
+          </div>
+        </div>
+        <div class="flex gap-4">
+          <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5" style="background:var(--sr-accent-subtle);color:var(--sr-accent)">2</div>
+          <div>
+            <p class="font-semibold">Click "Get New Widgets…" → "Download New Plasma Widgets"</p>
+          </div>
+        </div>
+        <div class="flex gap-4">
+          <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5" style="background:var(--sr-accent-subtle);color:var(--sr-accent)">3</div>
+          <div>
+            <p class="font-semibold">Search for "SoundRoot" and click Install</p>
+          </div>
+        </div>
+        <div class="flex gap-4">
+          <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5" style="background:var(--sr-accent-subtle);color:var(--sr-accent)">4</div>
+          <div>
+            <p class="font-semibold">Drag the SoundRoot widget onto your panel</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OPTION B: BUILD FROM SOURCE -->
+    <div class="rounded-2xl overflow-hidden" style="border:1px solid var(--sr-border-subtle)">
+      <div class="px-6 py-4 flex items-center gap-3" style="background:var(--sr-bg-elevated);border-bottom:1px solid var(--sr-border-subtle)">
+        <span class="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0" style="background:var(--sr-bg-overlay)">B</span>
+        <div>
+          <p class="font-bold">Build from Source</p>
+          <p class="text-xs" style="color:var(--sr-fg-muted)">For developers, testers, or latest changes</p>
+        </div>
+      </div>
+      <div class="p-6 md:p-8 space-y-4" style="background:var(--sr-bg-surface)">
+        <p class="text-sm" style="color:var(--sr-fg-secondary)">Clone the repo, build with CMake, and install locally:</p>
+        <pre class="rounded-xl p-4 text-[13px] overflow-x-auto" style="background:var(--sr-bg-elevated);border:1px solid var(--sr-border-subtle);color:var(--sr-fg-primary);font-family:var(--sr-font-mono)"><code><span style="color:var(--sr-fg-muted)"># Clone</span>
+git clone https://github.com/your-org/soundroot.git
+cd soundroot
+
+<span style="color:var(--sr-fg-muted)"># Configure</span>
+cmake -B build
+
+<span style="color:var(--sr-fg-muted)"># Build</span>
+cmake --build build
+
+<span style="color:var(--sr-fg-muted)"># Install locally (no sudo)</span>
+bash install-local.sh
+
+<span style="color:var(--sr-fg-muted)"># Restart plasmashell to pick up the new widget</span>
+kquitapp6 plasmashell && kstart plasmashell</code></pre>
+      </div>
+    </div>
+
+    <!-- TROUBLESHOOTING -->
+    <div class="rounded-2xl p-6 md:p-8" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+      <h2 class="text-xl font-bold mb-6">Troubleshooting</h2>
+      <div class="space-y-4">
+        <details class="group rounded-xl overflow-hidden" style="border:1px solid var(--sr-border-subtle)">
+          <summary class="cursor-pointer px-5 py-4 font-semibold list-none flex justify-between items-center" style="background:var(--sr-bg-elevated)">
+            Widget doesn't appear after install
+            <span class="font-mono text-sm" style="color:var(--sr-accent)">+</span>
+          </summary>
+          <div class="px-5 py-4 text-sm" style="color:var(--sr-fg-secondary)">
+            Restart plasmashell: <code class="font-mono px-1.5 py-0.5 rounded" style="background:var(--sr-bg-elevated)">kquitapp6 plasmashell && kstart plasmashell</code><br/>Or log out and back in.
+          </div>
+        </details>
+        <details class="group rounded-xl overflow-hidden" style="border:1px solid var(--sr-border-subtle)">
+          <summary class="cursor-pointer px-5 py-4 font-semibold list-none flex justify-between items-center" style="background:var(--sr-bg-elevated)">
+            No audio streams showing
+            <span class="font-mono text-sm" style="color:var(--sr-accent)">+</span>
+          </summary>
+          <div class="px-5 py-4 text-sm" style="color:var(--sr-fg-secondary)">
+            Make sure <code class="font-mono px-1.5 py-0.5 rounded" style="background:var(--sr-bg-elevated)">pipewire-pulse</code> is running: <code class="font-mono px-1.5 py-0.5 rounded" style="background:var(--sr-bg-elevated)">systemctl --user status pipewire-pulse</code>. Start it with <code class="font-mono px-1.5 py-0.5 rounded" style="background:var(--sr-bg-elevated)">systemctl --user start pipewire-pulse</code>.
+          </div>
+        </details>
+        <details class="group rounded-xl overflow-hidden" style="border:1px solid var(--sr-border-subtle)">
+          <summary class="cursor-pointer px-5 py-4 font-semibold list-none flex justify-between items-center" style="background:var(--sr-bg-elevated)">
+            Global shortcuts not working
+            <span class="font-mono text-sm" style="color:var(--sr-accent)">+</span>
+          </summary>
+          <div class="px-5 py-4 text-sm" style="color:var(--sr-fg-secondary)">
+            Open <em>System Settings → Shortcuts → Custom Shortcuts</em> and look for the SoundRoot component. Assign shortcuts there, or in the widget's config page under "Keyboard Shortcuts".
+          </div>
+        </details>
+        <details class="group rounded-xl overflow-hidden" style="border:1px solid var(--sr-border-subtle)">
+          <summary class="cursor-pointer px-5 py-4 font-semibold list-none flex justify-between items-center" style="background:var(--sr-bg-elevated)">
+            CMake can't find KDE dependencies
+            <span class="font-mono text-sm" style="color:var(--sr-accent)">+</span>
+          </summary>
+          <div class="px-5 py-4 text-sm" style="color:var(--sr-fg-secondary)">
+            Install KDE ECM and Frameworks dev packages. On Arch: <code class="font-mono px-1.5 py-0.5 rounded" style="background:var(--sr-bg-elevated)">sudo pacman -S extra-cmake-modules plasma-framework5</code>. On Ubuntu/Debian: <code class="font-mono px-1.5 py-0.5 rounded" style="background:var(--sr-bg-elevated)">sudo apt install extra-cmake-modules libkf6*-dev</code>.
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <footer style="border-top:1px solid var(--sr-border-subtle)" class="py-6 text-center text-xs font-mono" style="color:var(--sr-fg-muted)">
+    <a href="index.html" class="hover:underline mr-4">Home</a>
+    <a href="features.html" class="hover:underline mr-4">Features</a>
+    <a href="privacy-policy.html" class="hover:underline mr-4">Privacy</a>
+    <a href="terms-of-use.html" class="hover:underline">&copy; 2026 SoundRoot · MIT</a>
+  </footer>
+  <script src="nav.js"></script>
+</body>
+</html>

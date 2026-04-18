@@ -579,42 +579,6 @@ PlasmaExtras.Representation {
                     }
                 }
 
-                // ── + New Room button ───────────────────────────────
-                PlasmaComponents.Button {
-                    Layout.fillWidth: true
-                    text: "  + New Room"
-                    icon.name: "list-add"
-                    onClicked: {
-                        fullRoot.editingRoomIndex = -1
-                        roomNameField.text = ""
-                        addRoomCol.selectedColor = "#4a90d9"
-                        addRoomCol.selectedIcon = "audio-card"
-                        addRoomOverlay.visible = true
-                    }
-
-                    background: Rectangle {
-                        radius: Kirigami.Units.smallSpacing
-                        color: "#4a90d9"
-                        opacity: parent.hovered ? 1.0 : 0.85
-                    }
-                    contentItem: RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-                        Kirigami.Icon {
-                            source: "list-add"
-                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                            isMask: true
-                            Kirigami.Theme.textColor: "white"
-                        }
-                        PlasmaComponents.Label {
-                            text: "New Room"
-                            font.bold: true
-                            color: "white"
-                            Layout.fillWidth: true
-                        }
-                    }
-                }
-
                 Kirigami.Separator { Layout.fillWidth: true; opacity: 0.3 }
 
                 // ── Room list ────────────────────────────────────────
@@ -627,6 +591,8 @@ PlasmaExtras.Representation {
                         model: fullRoot.groupModel
                         spacing: 2
                         clip: true
+                        // Survives delegate recycling during moveGroup reorders
+                        property int dragIndex: -1
 
                         delegate: Rectangle {
                             id: roomDelegate
@@ -669,22 +635,30 @@ PlasmaExtras.Representation {
                                         anchors.fill: parent
                                         cursorShape: Qt.SizeVerCursor
                                         hoverEnabled: true
-                                        property int dragFromIdx: -1
+                                        // preventStealing stops the ScrollView/Flickable from
+                                        // taking the drag away after the press is established
+                                        preventStealing: true
 
                                         onPressed: function(mouse) {
-                                            dragFromIdx = index
+                                            roomListView.dragIndex = index
                                             mouse.accepted = true
                                         }
                                         onPositionChanged: function(mouse) {
-                                            if (!pressed || dragFromIdx < 0) return
-                                            var contentPos = mapToItem(roomListView.contentItem, mouse.x, mouse.y)
-                                            var targetIdx = roomListView.indexAt(contentPos.x, contentPos.y)
-                                            if (targetIdx >= 0 && targetIdx !== dragFromIdx) {
-                                                fullRoot.groupModel.moveGroup(dragFromIdx, targetIdx)
-                                                dragFromIdx = targetIdx
+                                            if (!pressed || roomListView.dragIndex < 0) return
+                                            var cp = mapToItem(roomListView.contentItem,
+                                                               mouse.x, mouse.y)
+                                            // Clamp so indexAt never returns -1 at list edges
+                                            var clampedY = Math.max(0,
+                                                Math.min(cp.y, roomListView.contentHeight - 1))
+                                            var targetIdx = roomListView.indexAt(cp.x, clampedY)
+                                            if (targetIdx >= 0 &&
+                                                    targetIdx !== roomListView.dragIndex) {
+                                                fullRoot.groupModel.moveGroup(
+                                                    roomListView.dragIndex, targetIdx)
+                                                roomListView.dragIndex = targetIdx
                                             }
                                         }
-                                        onReleased: { dragFromIdx = -1 }
+                                        onReleased: { roomListView.dragIndex = -1 }
                                     }
                                 }
 
@@ -789,18 +763,77 @@ PlasmaExtras.Representation {
                     }
                 }
 
-                // ── Settings / Save buttons at bottom ───────────────
-                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.3 }
+                // ── Bottom action bar: New Room + Settings ───────────
+                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.15 }
 
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
 
-                    Item { Layout.fillWidth: true }
+                    // New Room button — fills remaining space
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: Kirigami.Units.gridUnit * 2
+                        radius: Kirigami.Units.smallSpacing
+                        color: addBtnMa.pressed
+                               ? Qt.rgba(0.29, 0.56, 0.85, 0.35)
+                               : addBtnMa.containsMouse
+                                 ? Qt.rgba(0.29, 0.56, 0.85, 0.22)
+                                 : Qt.rgba(0.29, 0.56, 0.85, 0.12)
 
+                        Behavior on color { ColorAnimation { duration: 100 } }
+
+                        // Left accent bar
+                        Rectangle {
+                            anchors { left: parent.left; top: parent.top; bottom: parent.bottom; margins: 3 }
+                            width: 2
+                            radius: 1
+                            color: "#4a90d9"
+                            opacity: addBtnMa.containsMouse ? 1.0 : 0.6
+                            Behavior on opacity { NumberAnimation { duration: 100 } }
+                        }
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: Kirigami.Units.smallSpacing
+                            Kirigami.Icon {
+                                source: "list-add"
+                                isMask: true
+                                color: "#4a90d9"
+                                Layout.preferredWidth:  Kirigami.Units.iconSizes.small
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            }
+                            PlasmaComponents.Label {
+                                text: "New Room"
+                                font.bold: true
+                                color: "#4a90d9"
+                            }
+                        }
+
+                        MouseArea {
+                            id: addBtnMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                fullRoot.editingRoomIndex = -1
+                                roomNameField.text = ""
+                                addRoomCol.selectedColor = "#4a90d9"
+                                addRoomCol.selectedIcon = "audio-card"
+                                addRoomOverlay.visible = true
+                            }
+                        }
+                    }
+
+                    // Settings icon
                     PlasmaComponents.ToolButton {
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 2
+                        Layout.preferredHeight: Kirigami.Units.gridUnit * 2
                         icon.name: "configure"
+                        opacity: hovered ? 1.0 : 0.5
+                        Behavior on opacity { NumberAnimation { duration: 100 } }
                         onClicked: Plasmoid.internalAction("configure").trigger()
+                        PlasmaComponents.ToolTip { text: "Settings" }
                     }
                 }
             }
