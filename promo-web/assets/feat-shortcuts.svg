@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 480" fill="none">
+  <rect width="720" height="480" fill="#0e1f1a"/>
+  <!-- Keyboard illustration -->
+  <g transform="translate(60, 80)">
+    <text x="0" y="0" font-family="sans-serif" font-size="11" fill="#c850c8" letter-spacing="0.12em">GLOBAL SHORTCUTS</text>
+    <!-- Key: Ctrl -->
+    <rect x="0" y="20" width="70" height="50" rx="8" fill="#111f1b" stroke="#1e3c34" stroke-width="1.5"/>
+    <text x="35" y="50" text-anchor="middle" font-family="monospace" font-size="13" font-weight="700" fill="#c850c8">Ctrl</text>
+    <text x="80" y="50" font-family="sans-serif" font-size="20" fill="#3a5e50">+</text>
+    <!-- Key: Alt -->
+    <rect x="95" y="20" width="60" height="50" rx="8" fill="#111f1b" stroke="#1e3c34" stroke-width="1.5"/>
+    <text x="125" y="50" text-anchor="middle" font-family="monospace" font-size="13" font-weight="700" fill="#c850c8">Alt</text>
+    <text x="165" y="50" font-family="sans-serif" font-size="20" fill="#3a5e50">+</text>
+    <!-- Key: Arrow -->
+    <rect x="180" y="20" width="50" height="50" rx="8" fill="#111f1b" stroke="#c850c8" stroke-width="1.5"/>
+    <text x="205" y="52" text-anchor="middle" font-family="sans-serif" font-size="22" fill="#c850c8">→</text>
+    <text x="125" y="100" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#7a9990">Switch to next room</text>
+    <!-- Second shortcut -->
+    <rect x="0" y="130" width="70" height="50" rx="8" fill="#111f1b" stroke="#1e3c34" stroke-width="1.5"/>
+    <text x="35" y="160" text-anchor="middle" font-family="monospace" font-size="13" font-weight="700" fill="#4a90e2">Ctrl</text>
+    <text x="80" y="160" font-family="sans-serif" font-size="20" fill="#3a5e50">+</text>
+    <rect x="95" y="130" width="60" height="50" rx="8" fill="#111f1b" stroke="#1e3c34" stroke-width="1.5"/>
+    <text x="125" y="160" text-anchor="middle" font-family="monospace" font-size="13" font-weight="700" fill="#4a90e2">Alt</text>
+    <text x="165" y="160" font-family="sans-serif" font-size="20" fill="#3a5e50">+</text>
+    <rect x="180" y="130" width="50" height="50" rx="8" fill="#111f1b" stroke="#4a90e2" stroke-width="1.5"/>
+    <text x="205" y="162" text-anchor="middle" font-family="sans-serif" font-size="22" fill="#4a90e2">←</text>
+    <text x="125" y="210" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#7a9990">Switch to previous room</text>
+  </g>
+  <!-- Room switcher result -->
+  <g transform="translate(360, 80)">
+    <text x="0" y="0" font-family="sans-serif" font-size="11" fill="#e27450" letter-spacing="0.12em">INSTANT ROOM SWITCH</text>
+    <rect x="0" y="20" width="300" height="50" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+    <rect x="6" y="26" width="90" height="38" rx="8" fill="transparent" stroke="#1e3c34"/>
+    <text x="51" y="50" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#7a9990">Gaming</text>
+    <rect x="105" y="26" width="90" height="38" rx="8" fill="#50c878" fill-opacity="0.15" stroke="#50c878"/>
+    <text x="150" y="50" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="600" fill="#50c878">Music</text>
+    <rect x="204" y="26" width="90" height="38" rx="8" fill="transparent" stroke="#1e3c34"/>
+    <text x="249" y="50" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#7a9990">Work</text>
+    <!-- Arrow showing transition -->
+    <text x="150" y="100" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#50c878">↑ Active</text>
+    <!-- Benefit callouts -->
+    <rect x="0" y="140" width="300" height="36" rx="8" fill="#111f1b" stroke="#1e3c34"/>
+    <text x="16" y="163" font-family="sans-serif" font-size="12" fill="#e0ebe7">✦ No mouse needed — pure keyboard flow</text>
+    <rect x="0" y="186" width="300" height="36" rx="8" fill="#111f1b" stroke="#1e3c34"/>
+    <text x="16" y="209" font-family="sans-serif" font-size="12" fill="#e0ebe7">✦ All routes switch atomically</text>
+    <rect x="0" y="232" width="300" height="36" rx="8" fill="#111f1b" stroke="#1e3c34"/>
+    <text x="16" y="255" font-family="sans-serif" font-size="12" fill="#e0ebe7">✦ Configurable via KDE Shortcuts</text>
+  </g>
+</svg>

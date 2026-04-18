@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" fill="none">
+  <defs>
+    <linearGradient id="bg3" x1="0" y1="0" x2="640" y2="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0e1f1a"/>
+      <stop offset="100%" stop-color="#111f1b"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" fill="url(#bg3)"/>
+  <g opacity="0.04"><pattern id="g3" width="32" height="32" patternUnits="userSpaceOnUse"><circle cx="16" cy="16" r="0.8" fill="#fff"/></pattern><rect width="640" height="360" fill="url(#g3)"/></g>
+  <!-- Keyboard illustration -->
+  <rect x="140" y="100" width="360" height="160" rx="16" fill="#111f1b" stroke="#1e3c34" stroke-width="1.5"/>
+  <!-- Key row -->
+  <g font-family="monospace" font-size="10" fill="#5c7a71" text-anchor="middle">
+    <!-- Ctrl key -->
+    <rect x="180" y="140" width="56" height="36" rx="6" fill="#0e1f1a" stroke="#1e3c34"/>
+    <text x="208" y="163">Ctrl</text>
+    <!-- Alt key -->
+    <rect x="244" y="140" width="44" height="36" rx="6" fill="#0e1f1a" stroke="#1e3c34"/>
+    <text x="266" y="163">Alt</text>
+    <!-- Arrow right key (highlighted) -->
+    <rect x="296" y="140" width="44" height="36" rx="6" fill="#4a90e2" opacity="0.15" stroke="#4a90e2" stroke-width="1.5"/>
+    <text x="318" y="163" fill="#4a90e2" font-size="16">→</text>
+  </g>
+  <!-- Animated room switch visualization -->
+  <g transform="translate(320, 260)">
+    <!-- Room pills -->
+    <rect x="-120" y="-16" width="70" height="32" rx="8" fill="#111f1b" stroke="#1e3c34" opacity="0.5"/>
+    <text x="-85" y="-4" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#5c7a71">Gaming</text>
+    <rect x="-40" y="-16" width="70" height="32" rx="8" fill="#4a90e2" opacity="0.15" stroke="#4a90e2"/>
+    <text x="-5" y="-4" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="600" fill="#4a90e2">Work</text>
+    <rect x="40" y="-16" width="70" height="32" rx="8" fill="#111f1b" stroke="#1e3c34" opacity="0.5"/>
+    <text x="75" y="-4" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#5c7a71">Podcast</text>
+    <!-- Arrow -->
+    <path d="M-48 -0 L-53 -5 M-48 0 L-53 5" stroke="#4a90e2" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+  </g>
+  <!-- Step label -->
+  <rect x="240" y="20" width="160" height="28" rx="14" fill="#e27450" opacity="0.12"/>
+  <text x="320" y="39" text-anchor="middle" font-family="monospace" font-size="11" font-weight="600" fill="#e27450">STEP 3: SWITCH</text>
+</svg>
