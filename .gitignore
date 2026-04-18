@@ -24,5 +24,11 @@ Thumbs.db
 *.swo
 *~
 
+# Release archives
+soundroot-*.tar.gz
+soundroot-*.zip
+soundroot-*.plasmoid
+
 # Funny files
 _*
+make-release-archive.sh

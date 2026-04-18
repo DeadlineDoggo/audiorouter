@@ -1,13 +1,13 @@
 {
     "KPlugin": {
-        "Id": "org.kde.plasma.soundroot",
+        "Id": "com.github.deadlinedoggo.audiorouter",
         "Name": "SoundRoot",
         "Description": "Route application audio streams to different output devices with grouped presets",
         "Icon": "audio-volume-high",
         "Authors": [
             {
-                "Name": "SoundRoot Contributors",
-                "Email": "noreply@example.com"
+                "Name": "Emanuel Cisar",
+                "Email": "emanuelcisar@gmail.com"
             }
         ],
         "Category": "Multimedia",
