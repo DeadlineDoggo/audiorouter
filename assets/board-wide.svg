@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 870" fill="none">
+  <defs>
+    <linearGradient id="bgw" x1="0" y1="0" x2="1920" y2="870" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0e1f1a"/>
+      <stop offset="100%" stop-color="#0a1714"/>
+    </linearGradient>
+    <linearGradient id="wa" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#4a90e2" stop-opacity="0.8"/><stop offset="100%" stop-color="#4a90e2" stop-opacity="0.25"/></linearGradient>
+    <linearGradient id="wb" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#50c878" stop-opacity="0.8"/><stop offset="100%" stop-color="#50c878" stop-opacity="0.25"/></linearGradient>
+    <linearGradient id="wc" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#e27450" stop-opacity="0.8"/><stop offset="100%" stop-color="#e27450" stop-opacity="0.25"/></linearGradient>
+    <linearGradient id="wd" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#c850c8" stop-opacity="0.8"/><stop offset="100%" stop-color="#c850c8" stop-opacity="0.25"/></linearGradient>
+  </defs>
+  <rect width="1920" height="870" fill="url(#bgw)"/>
+  <g opacity="0.04"><pattern id="gw" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="20" cy="20" r="0.8" fill="#fff"/></pattern><rect width="1920" height="870" fill="url(#gw)"/></g>
+  <!-- Sidebar -->
+  <rect x="0" y="0" width="300" height="870" fill="#111f1b" opacity="0.85"/>
+  <rect x="300" y="0" width="1" height="870" fill="#1e3c34" opacity="0.5"/>
+  <text x="32" y="52" font-family="sans-serif" font-size="14" font-weight="600" fill="#7a9990" letter-spacing="0.12em">ROOMS</text>
+  <!-- Active room -->
+  <rect x="16" y="72" width="268" height="52" rx="10" fill="#4a90e2" opacity="0.12"/>
+  <rect x="16" y="72" width="4" height="52" rx="2" fill="#4a90e2"/>
+  <text x="56" y="103" font-family="sans-serif" font-size="15" font-weight="600" fill="#e0ebe7">🎮 Gaming</text>
+  <rect x="16" y="132" width="268" height="52" rx="10" fill="transparent"/>
+  <text x="56" y="163" font-family="sans-serif" font-size="15" fill="#5c7a71">💼 Work</text>
+  <rect x="16" y="192" width="268" height="52" rx="10" fill="transparent"/>
+  <text x="56" y="223" font-family="sans-serif" font-size="15" fill="#5c7a71">🎙 Podcast</text>
+  <rect x="16" y="252" width="268" height="52" rx="10" fill="transparent"/>
+  <text x="56" y="283" font-family="sans-serif" font-size="15" fill="#5c7a71">🎵 Music</text>
+  <!-- Source apps -->
+  <g>
+    <text x="460" y="80" font-family="sans-serif" font-size="12" fill="#5c7a71" letter-spacing="0.15em">APPLICATIONS</text>
+    <rect x="380" y="100" width="260" height="70" rx="14" fill="#111f1b" stroke="#1e3c34"/>
+    <text x="424" y="141" font-family="sans-serif" font-size="14" font-weight="600" fill="#e0ebe7">🦊 Firefox — YouTube</text>
+    <circle cx="624" cy="135" r="7" fill="#4a90e2" opacity="0.6"/>
+    <rect x="380" y="190" width="260" height="70" rx="14" fill="#111f1b" stroke="#1e3c34"/>
+    <text x="424" y="231" font-family="sans-serif" font-size="14" font-weight="600" fill="#e0ebe7">🎮 Counter-Strike 2</text>
+    <circle cx="624" cy="225" r="7" fill="#4a90e2" opacity="0.6"/>
+    <rect x="380" y="280" width="260" height="70" rx="14" fill="#111f1b" stroke="#1e3c34"/>
+    <text x="424" y="321" font-family="sans-serif" font-size="14" font-weight="600" fill="#e0ebe7">💬 Discord — Voice</text>
+    <circle cx="624" cy="315" r="7" fill="#50c878" opacity="0.6"/>
+    <rect x="380" y="370" width="260" height="70" rx="14" fill="#111f1b" stroke="#1e3c34"/>
+    <text x="424" y="411" font-family="sans-serif" font-size="14" font-weight="600" fill="#e0ebe7">🔔 Notifications</text>
+    <circle cx="624" cy="405" r="7" fill="#e27450" opacity="0.6"/>
+    <rect x="380" y="460" width="260" height="70" rx="14" fill="#111f1b" stroke="#1e3c34"/>
+    <text x="424" y="501" font-family="sans-serif" font-size="14" font-weight="600" fill="#e0ebe7">🎵 Spotify</text>
+    <circle cx="624" cy="495" r="7" fill="#c850c8" opacity="0.6"/>
+  </g>
+  <!-- Sink devices -->
+  <g>
+    <text x="1280" y="80" font-family="sans-serif" font-size="12" fill="#5c7a71" letter-spacing="0.15em">OUTPUT DEVICES</text>
+    <rect x="1200" y="140" width="280" height="70" rx="14" fill="#111f1b" stroke="#1e3c34"/>
+    <circle cx="1216" cy="175" r="7" fill="#4a90e2" opacity="0.6"/>
+    <text x="1260" y="181" font-family="sans-serif" font-size="14" font-weight="600" fill="#e0ebe7">🎧 HyperX Cloud II</text>
+    <rect x="1200" y="280" width="280" height="70" rx="14" fill="#111f1b" stroke="#1e3c34"/>
+    <circle cx="1216" cy="315" r="7" fill="#50c878" opacity="0.6"/>
+    <text x="1260" y="321" font-family="sans-serif" font-size="14" font-weight="600" fill="#e0ebe7">🔊 Desktop Speakers</text>
+    <rect x="1200" y="400" width="280" height="70" rx="14" fill="#111f1b" stroke="#1e3c34"/>
+    <circle cx="1216" cy="435" r="7" fill="#e27450" opacity="0.6"/>
+    <text x="1260" y="441" font-family="sans-serif" font-size="14" font-weight="600" fill="#e0ebe7">📺 Monitor HDMI</text>
+    <rect x="1200" y="500" width="280" height="70" rx="14" fill="#111f1b" stroke="#1e3c34"/>
+    <circle cx="1216" cy="535" r="7" fill="#c850c8" opacity="0.6"/>
+    <text x="1260" y="541" font-family="sans-serif" font-size="14" font-weight="600" fill="#e0ebe7">🎵 USB DAC</text>
+  </g>
+  <!-- Wires -->
+  <path d="M631 135 C900 135 1000 175 1209 175" stroke="url(#wa)" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M631 225 C900 225 1000 175 1209 175" stroke="url(#wa)" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M631 315 C900 315 1000 315 1209 315" stroke="url(#wb)" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M631 405 C900 405 1000 435 1209 435" stroke="url(#wc)" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M631 495 C900 495 1000 535 1209 535" stroke="url(#wd)" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <!-- Volume indicators on some wires -->
+  <g transform="translate(880,148)">
+    <rect x="-28" y="-10" width="56" height="20" rx="10" fill="#0e1f1a" stroke="#1e3c34"/>
+    <text x="0" y="4" text-anchor="middle" font-family="monospace" font-size="9" fill="#4a90e2">85%</text>
+  </g>
+  <g transform="translate(920,310)">
+    <rect x="-28" y="-10" width="56" height="20" rx="10" fill="#0e1f1a" stroke="#1e3c34"/>
+    <text x="0" y="4" text-anchor="middle" font-family="monospace" font-size="9" fill="#50c878">60%</text>
+  </g>
+  <!-- Status bar -->
+  <rect x="0" y="820" width="1920" height="50" fill="#0a1714"/>
+  <rect x="0" y="820" width="1920" height="1" fill="#1e3c34" opacity="0.4"/>
+  <circle cx="28" cy="845" r="5" fill="#50c878"/>
+  <text x="44" y="849" font-family="monospace" font-size="12" fill="#5c7a71">5 streams · 4 outputs · Gaming room active · PipeWire 1.4.1</text>
+</svg>

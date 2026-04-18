@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
+  <rect width="400" height="400" fill="#0e1f1a"/>
+  <!-- Edit popup -->
+  <rect x="60" y="60" width="280" height="280" rx="16" fill="#111f1b" stroke="#1e3c34"/>
+  <text x="200" y="100" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#e0ebe7">Edit Room</text>
+  <!-- Name field -->
+  <rect x="88" y="120" width="224" height="36" rx="8" fill="#0e1f1a" stroke="#1e3c34"/>
+  <text x="100" y="143" font-family="sans-serif" font-size="13" fill="#e0ebe7">Gaming</text>
+  <rect x="100" y="145" width="40" height="1" fill="#4a90e2" opacity="0.5"/>
+  <!-- Colour picker -->
+  <text x="88" y="180" font-family="sans-serif" font-size="10" fill="#5c7a71">Colour</text>
+  <g transform="translate(88, 190)">
+    <circle cx="12" cy="0" r="10" fill="#4a90e2" stroke="#e0ebe7" stroke-width="2"/>
+    <circle cx="38" cy="0" r="10" fill="#50c878"/>
+    <circle cx="64" cy="0" r="10" fill="#e27450"/>
+    <circle cx="90" cy="0" r="10" fill="#c850c8"/>
+    <circle cx="116" cy="0" r="10" fill="#e2c44a"/>
+    <circle cx="142" cy="0" r="10" fill="#50b4c8"/>
+    <circle cx="168" cy="0" r="10" fill="#e25074"/>
+    <circle cx="194" cy="0" r="10" fill="#78e250"/>
+  </g>
+  <!-- Icon picker -->
+  <text x="88" y="228" font-family="sans-serif" font-size="10" fill="#5c7a71">Icon</text>
+  <g transform="translate(88, 238)" font-family="sans-serif" font-size="18">
+    <rect x="0" y="-8" width="36" height="36" rx="8" fill="#4a90e2" opacity="0.12" stroke="#4a90e2"/>
+    <text x="8" y="16">🎮</text>
+    <rect x="44" y="-8" width="36" height="36" rx="8" fill="#0e1f1a" stroke="#1e3c34"/>
+    <text x="52" y="16">🎧</text>
+    <rect x="88" y="-8" width="36" height="36" rx="8" fill="#0e1f1a" stroke="#1e3c34"/>
+    <text x="96" y="16">🎵</text>
+    <rect x="132" y="-8" width="36" height="36" rx="8" fill="#0e1f1a" stroke="#1e3c34"/>
+    <text x="140" y="16">💼</text>
+    <rect x="176" y="-8" width="36" height="36" rx="8" fill="#0e1f1a" stroke="#1e3c34"/>
+    <text x="184" y="16">🎙</text>
+  </g>
+  <!-- Save button -->
+  <rect x="148" y="296" width="104" height="32" rx="16" fill="#4a90e2"/>
+  <text x="200" y="317" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="600" fill="white">Save</text>
+</svg>

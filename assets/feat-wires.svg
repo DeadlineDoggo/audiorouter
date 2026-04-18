@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 480" fill="none">
+  <defs>
+    <linearGradient id="fw1" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#4a90e2" stop-opacity="0.9"/><stop offset="100%" stop-color="#4a90e2" stop-opacity="0.2"/></linearGradient>
+    <linearGradient id="fw2" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#50c878" stop-opacity="0.9"/><stop offset="100%" stop-color="#50c878" stop-opacity="0.2"/></linearGradient>
+    <linearGradient id="fw3" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#e27450" stop-opacity="0.9"/><stop offset="100%" stop-color="#e27450" stop-opacity="0.2"/></linearGradient>
+    <linearGradient id="fw4" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#c850c8" stop-opacity="0.9"/><stop offset="100%" stop-color="#c850c8" stop-opacity="0.2"/></linearGradient>
+  </defs>
+  <rect width="720" height="480" fill="#0e1f1a"/>
+  <g opacity="0.04"><pattern id="fw" width="32" height="32" patternUnits="userSpaceOnUse"><circle cx="16" cy="16" r="0.8" fill="#fff"/></pattern><rect width="720" height="480" fill="url(#fw)"/></g>
+  <!-- Source nodes -->
+  <rect x="40" y="80" width="180" height="56" rx="10" fill="#111f1b" stroke="#1e3c34"/>
+  <text x="72" y="113" font-family="sans-serif" font-size="13" font-weight="600" fill="#e0ebe7">🦊 Firefox</text>
+  <circle cx="208" cy="108" r="6" fill="#4a90e2" opacity="0.6"/>
+  <rect x="40" y="160" width="180" height="56" rx="10" fill="#111f1b" stroke="#1e3c34"/>
+  <text x="72" y="193" font-family="sans-serif" font-size="13" font-weight="600" fill="#e0ebe7">🎮 CS2</text>
+  <circle cx="208" cy="188" r="6" fill="#4a90e2" opacity="0.6"/>
+  <rect x="40" y="240" width="180" height="56" rx="10" fill="#111f1b" stroke="#1e3c34"/>
+  <text x="72" y="273" font-family="sans-serif" font-size="13" font-weight="600" fill="#e0ebe7">💬 Discord</text>
+  <circle cx="208" cy="268" r="6" fill="#50c878" opacity="0.6"/>
+  <rect x="40" y="320" width="180" height="56" rx="10" fill="#111f1b" stroke="#1e3c34"/>
+  <text x="72" y="353" font-family="sans-serif" font-size="13" font-weight="600" fill="#e0ebe7">🎵 Spotify</text>
+  <circle cx="208" cy="348" r="6" fill="#c850c8" opacity="0.6"/>
+  <!-- Sink nodes -->
+  <rect x="500" y="100" width="180" height="56" rx="10" fill="#111f1b" stroke="#1e3c34"/>
+  <circle cx="512" cy="128" r="6" fill="#4a90e2" opacity="0.6"/>
+  <text x="528" y="133" font-family="sans-serif" font-size="13" font-weight="600" fill="#e0ebe7">🎧 Headphones</text>
+  <rect x="500" y="210" width="180" height="56" rx="10" fill="#111f1b" stroke="#1e3c34"/>
+  <circle cx="512" cy="238" r="6" fill="#50c878" opacity="0.6"/>
+  <text x="528" y="243" font-family="sans-serif" font-size="13" font-weight="600" fill="#e0ebe7">🔊 Speakers</text>
+  <rect x="500" y="320" width="180" height="56" rx="10" fill="#111f1b" stroke="#1e3c34"/>
+  <circle cx="512" cy="348" r="6" fill="#c850c8" opacity="0.6"/>
+  <text x="528" y="353" font-family="sans-serif" font-size="13" font-weight="600" fill="#e0ebe7">🎵 USB DAC</text>
+  <!-- Wires -->
+  <path d="M214 108 C350 108 370 128 506 128" stroke="url(#fw1)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M214 188 C350 188 370 128 506 128" stroke="url(#fw1)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M214 268 C350 268 370 238 506 238" stroke="url(#fw2)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M214 348 C350 348 370 348 506 348" stroke="url(#fw4)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <!-- Colour legend -->
+  <g transform="translate(260, 420)" font-family="monospace" font-size="9">
+    <circle cx="0" cy="0" r="4" fill="#4a90e2"/><text x="10" y="3" fill="#7a9990">Headphones</text>
+    <circle cx="110" cy="0" r="4" fill="#50c878"/><text x="120" y="3" fill="#7a9990">Speakers</text>
+    <circle cx="200" cy="0" r="4" fill="#c850c8"/><text x="210" y="3" fill="#7a9990">USB DAC</text>
+  </g>
+  <!-- Title -->
+  <text x="360" y="50" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#5c7a71" letter-spacing="0.15em">SINK-KEYED WIRE COLOURS</text>
+</svg>
