@@ -1,32 +1,84 @@
-html,
-body {
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
   margin: 0;
   padding: 0;
+  scroll-behavior: smooth;
 }
 
 html {
   min-height: 100%;
-  background-color: #f3eddc;
+  background-color: var(--sr-bg-base, #0a1714);
 }
 
-html.dark {
-  background-color: #0a1714;
+html.light {
+  background-color: var(--sr-bg-base, #f7faf9);
 }
 
 body {
   min-height: 100%;
+  font-family: var(--sr-font-sans, "Space Grotesk", sans-serif);
 }
 
+/* Noise overlay */
 .noise {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.06;
-  background-image: repeating-radial-gradient(circle at 0 0, transparent 0, #000 1px, transparent 2px);
+  opacity: 0.065;
+  background-image: repeating-radial-gradient(circle at 0 0, transparent 0, #ffffff 1px, transparent 2px);
 }
 
-.dark .noise {
-  opacity: 0.08;
-  background-image: repeating-radial-gradient(circle at 0 0, transparent 0, #fff 1px, transparent 2px);
+.light .noise,
+html.light .noise {
+  opacity: 0.045;
+  background-image: repeating-radial-gradient(circle at 0 0, transparent 0, #000000 1px, transparent 2px);
 }
+
+/* Feature card hover border glow */
+.feature-card:hover {
+  border-color: rgba(74, 144, 226, 0.4) !important;
+  box-shadow: 0 8px 40px rgba(74, 144, 226, 0.18);
+  transform: translateY(-3px);
+}
+
+/* kbd tag */
+kbd.kbd {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: var(--sr-font-mono, "IBM Plex Mono", monospace);
+  background: var(--sr-bg-elevated);
+  border: 1px solid var(--sr-border-strong);
+  color: var(--sr-fg-primary);
+  white-space: nowrap;
+}
+
+/* Nav link transitions */
+header nav a {
+  transition: background 0.15s, color 0.15s;
+}
+
+/* Scroll margin for anchor links */
+[id] {
+  scroll-margin-top: 72px;
+}
+
+/* Details/summary reset */
+details > summary {
+  transition: background 0.15s;
+}
+details > summary:hover {
+  background: var(--sr-bg-overlay) !important;
+}
+details[open] > summary {
+  border-bottom: 1px solid var(--sr-border-subtle);
+}
+
+/* Thin scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--sr-bg-base); }
+::-webkit-scrollbar-thumb { background: var(--sr-border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--sr-accent); }

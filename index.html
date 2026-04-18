@@ -1,213 +1,342 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SoundRoot | Audio Routing for KDE Plasma</title>
-  <meta name="description" content="SoundRoot lets you route app audio to multiple devices with groups and shortcuts on KDE Plasma." />
+  <title>SoundRoot — KDE Plasma Audio Routing</title>
+  <meta name="description" content="SoundRoot is the KDE Plasma applet for audio pros. Route any app to any device, build audio rooms, drag-reorder, and switch with global keyboard shortcuts."/>
+  <meta property="og:title" content="SoundRoot — KDE Plasma Audio Routing" />
+  <meta property="og:description" content="Route any app to any speaker. Build audio rooms. Switch instantly." />
   <link rel="icon" type="image/png" href="assets/icon.png" />
-  <script>
-    (function () {
-      const key = "soundroot-theme";
-      const saved = localStorage.getItem(key);
-      const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      const useDark = saved ? saved === "dark" : systemPrefersDark;
-      if (useDark) {
-        document.documentElement.classList.add("dark");
-      }
-    })();
-  </script>
+  <script>(function(){const s=localStorage.getItem("sr-theme"),d=window.matchMedia("(prefers-color-scheme:dark)").matches;document.documentElement.classList.toggle("dark",s?s==="dark":d);document.documentElement.classList.toggle("light",s?s==="light":!d);})()</script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       darkMode: "class",
       theme: {
         extend: {
-          fontFamily: {
-            display: ["Space Grotesk", "sans-serif"],
-            mono: ["IBM Plex Mono", "monospace"]
-          },
-          colors: {
-            ember: {
-              100: "#fff6df",
-              200: "#fbeab7",
-              300: "#f4d26f",
-              400: "#efbd3f",
-              500: "#dd9f11"
-            },
-            pine: {
-              900: "#0a1714",
-              800: "#11231f",
-              700: "#19352f",
-              200: "#bad8ce",
-              100: "#dcebe5"
-            }
-          },
-          boxShadow: {
-            glow: "0 22px 55px rgba(16, 45, 40, 0.35)",
-            lightglow: "0 22px 55px rgba(208, 147, 22, 0.25)"
-          },
-          backgroundImage: {
-            heroLight: "radial-gradient(1200px 550px at 10% -10%, rgba(255,212,121,.36), transparent 55%), radial-gradient(980px 600px at 100% 0%, rgba(85,175,148,.27), transparent 58%), linear-gradient(140deg,#fff9ec 0%,#f9f2df 45%,#f3eddc 100%)",
-            heroDark: "radial-gradient(1200px 550px at 10% -10%, rgba(242,178,52,.18), transparent 55%), radial-gradient(980px 600px at 100% 0%, rgba(62,170,136,.20), transparent 58%), linear-gradient(140deg,#081210 0%,#10231f 45%,#0a1714 100%)"
+          fontFamily: { display: ["Space Grotesk","sans-serif"], mono: ["IBM Plex Mono","monospace"] },
+          animation: {
+            "rise": "rise .65s cubic-bezier(0,0,.2,1) forwards",
           },
           keyframes: {
-            rise: {
-              "0%": { opacity: "0", transform: "translateY(16px)" },
-              "100%": { opacity: "1", transform: "translateY(0)" }
-            }
-          },
-          animation: {
-            rise: "rise .7s ease forwards"
+            rise: {"0%":{opacity:"0",transform:"translateY(18px)"},"100%":{opacity:"1",transform:"translateY(0)"}}
           }
         }
       }
     };
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="font-display text-pine-800 dark:text-pine-100 bg-heroLight dark:bg-heroDark selection:bg-ember-300/70 dark:selection:bg-emerald-300/45">
+<body class="font-display antialiased overflow-x-hidden" style="background:var(--sr-bg-base);color:var(--sr-fg-primary)">
   <div class="noise"></div>
-  <div class="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,.45),transparent_50%)] dark:bg-[radial-gradient(circle_at_20%_10%,rgba(255,228,162,.08),transparent_50%)]"></div>
 
-  <header class="sticky top-0 z-30 border-b border-black/10 dark:border-white/10 backdrop-blur-xl bg-white/55 dark:bg-black/25">
-    <div class="mx-auto max-w-6xl px-4 py-3 md:px-6 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <img class="h-8 w-8 rounded-lg border border-black/10 dark:border-white/10" src="assets/icon.png" alt="SoundRoot icon" />
-        <span class="text-lg font-bold tracking-wide">SoundRoot</span>
-      </div>
+  <!-- NAV -->
+  <header style="border-bottom:1px solid var(--sr-border-subtle);backdrop-filter:blur(20px);background:color-mix(in srgb,var(--sr-bg-base) 70%,transparent)" class="sticky top-0 z-40">
+    <div class="mx-auto max-w-5xl px-5 h-14 flex items-center justify-between gap-4">
+      <a href="index.html" class="flex items-center gap-2.5 shrink-0">
+        <img class="h-7 w-7 rounded-lg" style="border:1px solid var(--sr-border-strong)" src="assets/icon.png" alt="SoundRoot" />
+        <span class="text-base font-bold tracking-wide">SoundRoot</span>
+      </a>
+      <nav class="hidden md:flex items-center gap-1 text-sm font-medium" style="color:var(--sr-fg-secondary)">
+        <a href="features.html" class="px-3 py-1.5 rounded-md transition" style="--hover-bg:var(--sr-accent-subtle)" onmouseover="this.style.background='var(--sr-accent-subtle)';this.style.color='var(--sr-fg-primary)'" onmouseout="this.style.background='';this.style.color='var(--sr-fg-secondary)'">Features</a>
+        <a href="install.html" class="px-3 py-1.5 rounded-md transition" onmouseover="this.style.background='var(--sr-accent-subtle)';this.style.color='var(--sr-fg-primary)'" onmouseout="this.style.background='';this.style.color='var(--sr-fg-secondary)'">Install</a>
+        <a href="privacy-policy.html" class="px-3 py-1.5 rounded-md transition" onmouseover="this.style.background='var(--sr-accent-subtle)';this.style.color='var(--sr-fg-primary)'" onmouseout="this.style.background='';this.style.color='var(--sr-fg-secondary)'">Privacy</a>
+      </nav>
       <div class="flex items-center gap-2">
-        <button id="themeToggle" class="rounded-full border border-black/15 dark:border-white/20 px-3 py-1.5 text-xs font-mono uppercase tracking-wider hover:bg-black/5 dark:hover:bg-white/10">
-          Auto Theme
+        <button id="themeToggle" aria-label="Toggle theme" class="h-8 px-3 rounded-full text-xs font-mono uppercase tracking-widest transition" style="border:1px solid var(--sr-border-strong);color:var(--sr-fg-secondary)">
+          Dark
         </button>
-        <a class="rounded-full border border-black/15 dark:border-white/20 px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="#download">Get Started</a>
+        <a href="install.html" class="h-8 px-4 rounded-full text-white text-sm font-semibold flex items-center gap-1.5 transition" style="background:var(--sr-accent);box-shadow:0 8px 40px rgba(74,144,226,.35)">
+          Get Started
+        </a>
       </div>
     </div>
   </header>
 
-  <main class="mx-auto max-w-6xl px-4 py-8 md:px-6 md:py-12">
-    <section class="grid items-center gap-6 lg:grid-cols-[1.08fr_1fr]">
-      <div class="opacity-0 animate-rise [animation-delay:80ms] [animation-fill-mode:forwards]">
-        <p class="font-mono text-xs tracking-[0.18em] text-amber-700 dark:text-amber-300">KDE PLASMA APPLET</p>
-        <h1 class="mt-2 text-4xl font-bold leading-[0.98] md:text-6xl xl:text-7xl">
-          Route every app to the right speaker, instantly.
+  <!-- HERO -->
+  <section class="relative min-h-[88vh] flex flex-col justify-center" style="background:var(--sr-hero-gradient)">
+    <div class="pointer-events-none absolute inset-0 overflow-hidden">
+      <div class="absolute -top-24 -left-24 w-[520px] h-[520px] rounded-full opacity-[.06]" style="border:1px solid var(--sr-accent)"></div>
+      <div class="absolute -top-8 -right-16 w-[360px] h-[360px] rounded-full opacity-[.04]" style="border:1px solid var(--sr-green)"></div>
+      <div class="absolute bottom-0 left-1/4 w-[800px] h-px opacity-20" style="background:linear-gradient(90deg,transparent,var(--sr-accent),transparent)"></div>
+    </div>
+    <div class="relative mx-auto max-w-5xl w-full px-5 pt-16 pb-20 grid lg:grid-cols-2 gap-12 items-center">
+      <div class="opacity-0 animate-rise" style="animation-delay:60ms;animation-fill-mode:forwards">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-3" style="color:var(--sr-accent)">KDE Plasma 6 · PipeWire · Wayland</p>
+        <h1 class="text-5xl md:text-6xl xl:text-7xl font-bold leading-[.96] tracking-tight">
+          Audio&nbsp;routing<br/><span style="color:var(--sr-accent)">your&nbsp;way.</span>
         </h1>
-        <p class="mt-4 max-w-2xl text-base text-pine-700 dark:text-pine-200 md:text-lg">
-          Build audio rooms, switch them with shortcuts, and keep your setup remembered.
-          SoundRoot gives you focused routing without opening a full mixer every time.
+        <p class="mt-5 max-w-xl text-lg leading-relaxed" style="color:var(--sr-fg-secondary)">
+          Build named <strong style="color:var(--sr-fg-primary)">audio rooms</strong>, drag-wire apps to any speaker combination, and switch your whole setup with a keyboard shortcut — all from a panel widget.
         </p>
-        <div class="mt-6 flex flex-wrap gap-3">
-          <a class="rounded-full bg-amber-400 px-5 py-2.5 text-sm font-bold text-amber-950 shadow-lightglow transition hover:-translate-y-0.5 hover:bg-amber-300" href="#features">Explore Features</a>
-          <a class="rounded-full border border-black/15 dark:border-white/20 bg-white/60 dark:bg-white/5 px-5 py-2.5 text-sm font-semibold transition hover:-translate-y-0.5 hover:bg-white/85 dark:hover:bg-white/10" href="#shots">View Preview</a>
+        <ul class="mt-6 grid grid-cols-2 gap-2 text-sm" style="color:var(--sr-fg-secondary)">
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--sr-green)"></span>Many-to-many routing</li>
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--sr-green)"></span>Per-route volume</li>
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--sr-green)"></span>Global shortcuts</li>
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--sr-green)"></span>Drag-reorder rooms</li>
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--sr-green)"></span>Colour-coded wires</li>
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--sr-green)"></span>PipeWire native</li>
+        </ul>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href="install.html" class="rounded-full text-white px-6 py-3 text-sm font-bold transition hover:-translate-y-0.5" style="background:var(--sr-accent);box-shadow:0 8px 40px rgba(74,144,226,.35)">Install Now</a>
+          <a href="features.html" class="rounded-full px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5" style="border:1px solid var(--sr-border-strong);background:color-mix(in srgb,var(--sr-bg-surface) 50%,transparent)">See All Features</a>
+          <a href="https://github.com/" target="_blank" rel="noopener" class="rounded-full px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5 flex items-center gap-2" style="border:1px solid var(--sr-border-strong);background:color-mix(in srgb,var(--sr-bg-surface) 50%,transparent)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            GitHub
+          </a>
         </div>
       </div>
-
-      <div class="opacity-0 animate-rise [animation-delay:180ms] [animation-fill-mode:forwards] rounded-3xl border border-black/10 dark:border-white/10 overflow-hidden shadow-glow bg-white/70 dark:bg-black/25">
-        <img class="w-full aspect-[9/6.3] object-cover" src="https://picsum.photos/seed/soundroot-ui-fancy/980/680" alt="Placeholder screenshot of SoundRoot interface" />
-        <div class="flex items-center justify-between px-4 py-2.5 text-xs font-mono text-pine-700 dark:text-pine-200">
-          <span>Main Widget View</span>
-          <span>SoundRoot UI concept</span>
+      <!-- Hero card -->
+      <div class="opacity-0 animate-rise" style="animation-delay:180ms;animation-fill-mode:forwards">
+        <div class="rounded-2xl overflow-hidden" style="border:1px solid var(--sr-border-strong);box-shadow:0 32px 80px rgba(0,0,0,.55);background:var(--sr-bg-surface)">
+          <div class="flex items-center gap-1.5 px-4 py-2.5" style="border-bottom:1px solid var(--sr-border-subtle);background:var(--sr-bg-elevated)">
+            <span class="w-2.5 h-2.5 rounded-full bg-red-500/70"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-yellow-500/70"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-green-500/70"></span>
+            <span class="ml-2 font-mono text-[11px]" style="color:var(--sr-fg-muted)">SoundRoot — KDE Panel Widget</span>
+          </div>
+          <img class="w-full aspect-[1.48/1] object-cover" src="https://picsum.photos/seed/soundroot-hero/920/620" alt="SoundRoot widget" />
+          <div class="px-4 py-2 flex justify-between items-center text-[11px] font-mono" style="background:var(--sr-bg-elevated);color:var(--sr-fg-muted)">
+            <span>3 apps · 2 outputs · 1 active room</span>
+            <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full animate-pulse" style="background:var(--sr-green)"></span>Live routing</span>
+          </div>
+        </div>
+        <div class="mt-3 flex gap-2 justify-end flex-wrap text-xs font-mono" style="color:var(--sr-fg-secondary)">
+          <span class="px-3 py-1 rounded-full" style="border:1px solid var(--sr-border-strong)">PipeWire 1.x</span>
+          <span class="px-3 py-1 rounded-full" style="border:1px solid var(--sr-border-strong)">Qt 6 / Plasma 6</span>
+          <span class="px-3 py-1 rounded-full" style="border:1px solid var(--sr-border-strong)">Wayland native</span>
         </div>
       </div>
-    </section>
+    </div>
+    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-[11px] font-mono" style="color:var(--sr-fg-muted)">
+      <span class="w-px h-8" style="background:var(--sr-border-strong)"></span>scroll
+    </div>
+  </section>
 
-    <section id="features" class="mt-12 grid gap-3 md:mt-16 md:grid-cols-3">
-      <article class="opacity-0 animate-rise [animation-delay:140ms] [animation-fill-mode:forwards] rounded-2xl border border-black/10 dark:border-white/10 bg-white/65 dark:bg-white/5 p-5">
-        <h2 class="text-xl font-bold">Audio Rooms</h2>
-        <p class="mt-2 text-sm text-pine-700 dark:text-pine-200">Group routes by context such as gaming, streaming, or meetings, then activate only what you need.</p>
-      </article>
-      <article class="opacity-0 animate-rise [animation-delay:230ms] [animation-fill-mode:forwards] rounded-2xl border border-black/10 dark:border-white/10 bg-white/65 dark:bg-white/5 p-5">
-        <h2 class="text-xl font-bold">Many-to-Many Routing</h2>
-        <p class="mt-2 text-sm text-pine-700 dark:text-pine-200">Send one app to multiple outputs or isolate several apps to dedicated devices with per-route volume.</p>
-      </article>
-      <article class="opacity-0 animate-rise [animation-delay:320ms] [animation-fill-mode:forwards] rounded-2xl border border-black/10 dark:border-white/10 bg-white/65 dark:bg-white/5 p-5">
-        <h2 class="text-xl font-bold">Global Shortcuts</h2>
-        <p class="mt-2 text-sm text-pine-700 dark:text-pine-200">Jump to next or previous room without opening the widget, using KDE global acceleration settings.</p>
-      </article>
-    </section>
+  <!-- PROOF BAR -->
+  <div style="border-top:1px solid var(--sr-border-subtle);border-bottom:1px solid var(--sr-border-subtle);background:color-mix(in srgb,var(--sr-bg-surface) 60%,transparent)" class="py-4">
+    <div class="mx-auto max-w-5xl px-5 flex flex-wrap items-center justify-center gap-x-10 gap-y-2 text-sm font-mono" style="color:var(--sr-fg-muted)">
+      <span>✦ Open Source · MIT</span>
+      <span>✦ No telemetry · No cloud</span>
+      <span>✦ KDE Store approved</span>
+      <span>✦ Native PipeWire API</span>
+      <span>✦ KDE Plasma 6</span>
+    </div>
+  </div>
 
-    <section id="shots" class="mt-14 md:mt-20">
-      <div class="opacity-0 animate-rise [animation-delay:120ms] [animation-fill-mode:forwards]">
-        <p class="font-mono text-xs tracking-[0.18em] text-amber-700 dark:text-amber-300">PRODUCT PREVIEW</p>
-        <h2 class="mt-2 text-3xl font-bold md:text-4xl">Core flows you can present on your project page.</h2>
+  <!-- FEATURES -->
+  <section class="mx-auto max-w-5xl px-5 py-20 md:py-28">
+    <div class="text-center mb-14">
+      <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">What it does</p>
+      <h2 class="text-3xl md:text-5xl font-bold">Everything your audio setup needs.</h2>
+      <p class="mt-3 max-w-2xl mx-auto" style="color:var(--sr-fg-secondary)">From a 2-app setup to complex multi-output rigs — SoundRoot handles it from the panel.</p>
+    </div>
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="feature-card rounded-2xl p-6 transition-all group" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition group-hover:scale-110" style="background:var(--sr-accent-subtle)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--sr-accent)" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M12 17v4m-4 0h8"/></svg>
+        </div>
+        <h3 class="font-bold text-lg mb-1">Audio Rooms</h3>
+        <p class="text-sm leading-relaxed" style="color:var(--sr-fg-secondary)">Named presets — Gaming, Work, Podcast, Music — that remember every route and restore them instantly when activated.</p>
       </div>
-      <div class="mt-4 grid gap-4 md:mt-6 md:grid-cols-3">
-        <figure class="opacity-0 animate-rise [animation-delay:160ms] [animation-fill-mode:forwards] overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/65 dark:bg-white/5">
-          <img class="w-full aspect-[7/5.2] object-cover" src="https://picsum.photos/seed/soundroot-route-fancy/700/520" alt="Placeholder image for route management" />
-          <figcaption class="px-3 py-2 text-xs font-mono text-pine-700 dark:text-pine-200">Route setup and output selection</figcaption>
-        </figure>
-        <figure class="opacity-0 animate-rise [animation-delay:240ms] [animation-fill-mode:forwards] overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/65 dark:bg-white/5">
-          <img class="w-full aspect-[7/5.2] object-cover" src="https://picsum.photos/seed/soundroot-group-fancy/700/520" alt="Placeholder image for groups" />
-          <figcaption class="px-3 py-2 text-xs font-mono text-pine-700 dark:text-pine-200">Audio groups and activation state</figcaption>
-        </figure>
-        <figure class="opacity-0 animate-rise [animation-delay:320ms] [animation-fill-mode:forwards] overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/65 dark:bg-white/5">
-          <img class="w-full aspect-[7/5.2] object-cover" src="https://picsum.photos/seed/soundroot-shortcuts-fancy/700/520" alt="Placeholder image for shortcuts" />
-          <figcaption class="px-3 py-2 text-xs font-mono text-pine-700 dark:text-pine-200">Keyboard shortcut workflow</figcaption>
-        </figure>
+      <div class="feature-card rounded-2xl p-6 transition-all group" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition group-hover:scale-110" style="background:var(--sr-accent-subtle)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--sr-accent)" stroke-width="2"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M9 11l6-3M9 13l6 3"/></svg>
+        </div>
+        <h3 class="font-bold text-lg mb-1">Visual Wire Routing</h3>
+        <p class="text-sm leading-relaxed" style="color:var(--sr-fg-secondary)">Drag from any app to any output device. Colour-coded wires show which streams share the same destination at a glance.</p>
       </div>
-    </section>
+      <div class="feature-card rounded-2xl p-6 transition-all group" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition group-hover:scale-110" style="background:var(--sr-accent-subtle)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--sr-accent)" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+        </div>
+        <h3 class="font-bold text-lg mb-1">Many-to-Many Routing</h3>
+        <p class="text-sm leading-relaxed" style="color:var(--sr-fg-secondary)">Send one app to headphones and speakers at the same time. Or isolate apps each to their own dedicated device.</p>
+      </div>
+      <div class="feature-card rounded-2xl p-6 transition-all group" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition group-hover:scale-110" style="background:var(--sr-accent-subtle)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--sr-accent)" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        </div>
+        <h3 class="font-bold text-lg mb-1">Global Shortcuts</h3>
+        <p class="text-sm leading-relaxed" style="color:var(--sr-fg-secondary)">Jump to next/previous room systemwide without touching the panel. Fully configurable in KDE Keyboard Shortcuts.</p>
+      </div>
+      <div class="feature-card rounded-2xl p-6 transition-all group" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition group-hover:scale-110" style="background:var(--sr-accent-subtle)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--sr-accent)" stroke-width="2"><path d="M12 20V4M5 11l7-7 7 7"/><path d="M5 17l7 3 7-3"/></svg>
+        </div>
+        <h3 class="font-bold text-lg mb-1">Drag-Reorder Rooms</h3>
+        <p class="text-sm leading-relaxed" style="color:var(--sr-fg-secondary)">Grab the grip handle and drag rooms into whatever order suits your workflow. Order persists across sessions.</p>
+      </div>
+      <div class="feature-card rounded-2xl p-6 transition-all group" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition group-hover:scale-110" style="background:var(--sr-accent-subtle)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--sr-accent)" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        </div>
+        <h3 class="font-bold text-lg mb-1">Per-Route Volume</h3>
+        <p class="text-sm leading-relaxed" style="color:var(--sr-fg-secondary)">Dial exact output levels per route — separate from system master volume. Never be surprised by a loud tab again.</p>
+      </div>
+    </div>
+    <div class="text-center mt-8">
+      <a href="features.html" class="inline-flex items-center gap-2 text-sm font-medium hover:underline" style="color:var(--sr-accent)">See the full feature list →</a>
+    </div>
+  </section>
 
-    <section id="download" class="mt-14 rounded-3xl border border-black/10 dark:border-white/10 bg-[linear-gradient(135deg,rgba(255,194,89,.32),rgba(73,187,148,.28))] dark:bg-[linear-gradient(135deg,rgba(255,194,89,.18),rgba(73,187,148,.18))] p-6 md:mt-20 md:p-10">
-      <h2 class="text-3xl font-bold md:text-5xl">Ready to route smarter?</h2>
-      <p class="mt-3 max-w-3xl text-sm text-pine-700 dark:text-pine-100 md:text-base">
-        SoundRoot is a KDE Plasma applet for multi-output routing, route groups, and quick switching with global shortcuts.
+  <!-- HOW IT WORKS -->
+  <section style="background:var(--sr-bg-surface);border-top:1px solid var(--sr-border-subtle);border-bottom:1px solid var(--sr-border-subtle)" class="py-20 md:py-28">
+    <div class="mx-auto max-w-5xl px-5">
+      <div class="text-center mb-14">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">In practice</p>
+        <h2 class="text-3xl md:text-5xl font-bold">Three steps. Total control.</h2>
+      </div>
+      <div class="grid md:grid-cols-3 gap-8">
+        <div class="text-center">
+          <div class="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold mb-4 transition" style="border:1px solid var(--sr-border-strong);background:var(--sr-bg-elevated);color:var(--sr-accent)">1</div>
+          <img class="w-full aspect-video object-cover rounded-xl mb-4" style="border:1px solid var(--sr-border-subtle)" src="https://picsum.photos/seed/sr-step1/640/360" alt="Create a room" />
+          <h3 class="font-bold text-lg">Create a Room</h3>
+          <p class="mt-2 text-sm" style="color:var(--sr-fg-secondary)">Hit <em>New Room</em>, pick a name, colour, and icon. Give it a personality that matches your use case.</p>
+        </div>
+        <div class="text-center">
+          <div class="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold mb-4" style="border:1px solid var(--sr-border-strong);background:var(--sr-bg-elevated);color:var(--sr-accent)">2</div>
+          <img class="w-full aspect-video object-cover rounded-xl mb-4" style="border:1px solid var(--sr-border-subtle)" src="https://picsum.photos/seed/sr-step2/640/360" alt="Wire apps to outputs" />
+          <h3 class="font-bold text-lg">Wire Apps to Outputs</h3>
+          <p class="mt-2 text-sm" style="color:var(--sr-fg-secondary)">Drag a wire from any running app to any sound device. Multi-output combines automatically via PipeWire.</p>
+        </div>
+        <div class="text-center">
+          <div class="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold mb-4" style="border:1px solid var(--sr-border-strong);background:var(--sr-bg-elevated);color:var(--sr-accent)">3</div>
+          <img class="w-full aspect-video object-cover rounded-xl mb-4" style="border:1px solid var(--sr-border-subtle)" src="https://picsum.photos/seed/sr-step3/640/360" alt="Switch with shortcuts" />
+          <h3 class="font-bold text-lg">Switch with Shortcuts</h3>
+          <p class="mt-2 text-sm" style="color:var(--sr-fg-secondary)">Activate the room — all routes apply instantly. Use <kbd class="kbd">Ctrl+Alt+→</kbd> to cycle mid-game without touching the mouse.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREENSHOTS -->
+  <section class="mx-auto max-w-5xl px-5 py-20 md:py-28">
+    <div class="text-center mb-10">
+      <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">Screenshots</p>
+      <h2 class="text-3xl md:text-4xl font-bold">A widget that earns its panel space.</h2>
+    </div>
+    <div class="rounded-3xl overflow-hidden" style="border:1px solid var(--sr-border-strong);box-shadow:0 32px 80px rgba(0,0,0,.55)">
+      <div class="flex items-center gap-1.5 px-4 py-2.5" style="background:var(--sr-bg-elevated);border-bottom:1px solid var(--sr-border-subtle)">
+        <span class="w-2.5 h-2.5 rounded-full bg-red-500/70"></span>
+        <span class="w-2.5 h-2.5 rounded-full bg-yellow-500/70"></span>
+        <span class="w-2.5 h-2.5 rounded-full bg-green-500/70"></span>
+        <span class="ml-auto font-mono text-[11px]" style="color:var(--sr-fg-muted)">Connection Board — Gaming Room active</span>
+      </div>
+      <img class="w-full aspect-[2.2/1] object-cover" src="https://picsum.photos/seed/soundroot-board/1920/870" alt="SoundRoot connection board" />
+    </div>
+    <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+      <figure class="overflow-hidden rounded-xl" style="border:1px solid var(--sr-border-subtle)">
+        <img class="w-full aspect-square object-cover" src="https://picsum.photos/seed/sr-shot-panel/400/400" alt="Panel icon" />
+        <figcaption class="px-2 py-1.5 text-[10px] font-mono" style="color:var(--sr-fg-muted);background:var(--sr-bg-surface)">Panel icon · status dot</figcaption>
+      </figure>
+      <figure class="overflow-hidden rounded-xl" style="border:1px solid var(--sr-border-subtle)">
+        <img class="w-full aspect-square object-cover" src="https://picsum.photos/seed/sr-shot-sidebar/400/400" alt="Sidebar room list" />
+        <figcaption class="px-2 py-1.5 text-[10px] font-mono" style="color:var(--sr-fg-muted);background:var(--sr-bg-surface)">Room sidebar · drag handles</figcaption>
+      </figure>
+      <figure class="overflow-hidden rounded-xl" style="border:1px solid var(--sr-border-subtle)">
+        <img class="w-full aspect-square object-cover" src="https://picsum.photos/seed/sr-shot-edit/400/400" alt="Room edit popup" />
+        <figcaption class="px-2 py-1.5 text-[10px] font-mono" style="color:var(--sr-fg-muted);background:var(--sr-bg-surface)">Edit popup · icon + colour</figcaption>
+      </figure>
+      <figure class="overflow-hidden rounded-xl" style="border:1px solid var(--sr-border-subtle)">
+        <img class="w-full aspect-square object-cover" src="https://picsum.photos/seed/sr-shot-shortcuts/400/400" alt="Shortcuts config" />
+        <figcaption class="px-2 py-1.5 text-[10px] font-mono" style="color:var(--sr-fg-muted);background:var(--sr-bg-surface)">Shortcuts config page</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- USE CASES -->
+  <section style="background:var(--sr-bg-surface);border-top:1px solid var(--sr-border-subtle);border-bottom:1px solid var(--sr-border-subtle)" class="py-20 md:py-24">
+    <div class="mx-auto max-w-5xl px-5">
+      <div class="text-center mb-12">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">Use cases</p>
+        <h2 class="text-3xl md:text-4xl font-bold">Built for every workflow.</h2>
+      </div>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="rounded-2xl p-6 transition hover:-translate-y-0.5" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-elevated)">
+          <p class="font-mono text-[11px] tracking-widest mb-2 uppercase" style="color:var(--sr-accent)">🎮 Gaming</p>
+          <h3 class="text-xl font-bold mb-2">Game audio to headset, Discord to speakers</h3>
+          <p class="text-sm" style="color:var(--sr-fg-secondary)">Create a Gaming room that wires your game to your headphones and Discord to the speakers — activate it once, forget about it.</p>
+        </div>
+        <div class="rounded-2xl p-6 transition hover:-translate-y-0.5" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-elevated)">
+          <p class="font-mono text-[11px] tracking-widest mb-2 uppercase" style="color:var(--sr-accent)">📺 Streaming</p>
+          <h3 class="text-xl font-bold mb-2">Separate stream and monitor mixes</h3>
+          <p class="text-sm" style="color:var(--sr-fg-secondary)">Send OBS and browser tabs to your stream monitor while keeping alert sounds on a different device. Switch with one keystroke.</p>
+        </div>
+        <div class="rounded-2xl p-6 transition hover:-translate-y-0.5" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-elevated)">
+          <p class="font-mono text-[11px] tracking-widest mb-2 uppercase" style="color:var(--sr-accent)">💼 Work from Home</p>
+          <h3 class="text-xl font-bold mb-2">Meeting room vs focus room</h3>
+          <p class="text-sm" style="color:var(--sr-fg-secondary)">In meetings everything goes to a headset. In focus mode, music to speakers, notifications silenced. Switch in one key.</p>
+        </div>
+        <div class="rounded-2xl p-6 transition hover:-translate-y-0.5" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-elevated)">
+          <p class="font-mono text-[11px] tracking-widest mb-2 uppercase" style="color:var(--sr-accent)">🎧 Music Production</p>
+          <h3 class="text-xl font-bold mb-2">DAW to monitors, reference through earbuds</h3>
+          <p class="text-sm" style="color:var(--sr-fg-secondary)">Multi-output a single DAW stream to studio monitors and reference earbuds simultaneously — or switch profiles for client playback.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="mx-auto max-w-5xl px-5 py-20 md:py-28">
+    <div class="rounded-3xl px-8 py-14 md:px-16 md:py-20 relative overflow-hidden text-center" style="border:1px solid var(--sr-border-strong);background:var(--sr-bg-surface)">
+      <div class="pointer-events-none absolute inset-0">
+        <div class="absolute -top-20 left-1/2 -translate-x-1/2 w-[600px] h-[300px] rounded-full blur-3xl opacity-[.06]" style="background:var(--sr-accent)"></div>
+      </div>
+      <p class="relative font-mono text-[11px] tracking-[.2em] uppercase mb-3" style="color:var(--sr-accent)">Free & open source</p>
+      <h2 class="relative text-4xl md:text-6xl font-bold leading-tight">Ready to take control<br/>of your audio?</h2>
+      <p class="relative mt-4 max-w-xl mx-auto" style="color:var(--sr-fg-secondary)">
+        Install SoundRoot from the KDE Store or build from source. Works today on KDE Plasma 6 with PipeWire.
       </p>
-      <div class="mt-5 flex flex-wrap gap-3">
-        <a class="rounded-full bg-pine-900 px-5 py-2.5 text-sm font-bold text-pine-100 transition hover:-translate-y-0.5 dark:bg-emerald-200 dark:text-pine-900" href="https://github.com/" target="_blank" rel="noopener noreferrer">View Source Code</a>
-        <a class="rounded-full border border-black/15 dark:border-white/20 px-5 py-2.5 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="https://store.kde.org" target="_blank" rel="noopener noreferrer">Browse on KDE Store</a>
+      <div class="relative mt-8 flex flex-wrap gap-3 justify-center">
+        <a href="install.html" class="rounded-full text-white px-8 py-3.5 text-sm font-bold transition hover:-translate-y-0.5" style="background:var(--sr-accent);box-shadow:0 8px 40px rgba(74,144,226,.35)">Install SoundRoot</a>
+        <a href="https://github.com/" target="_blank" rel="noopener" class="rounded-full px-8 py-3.5 text-sm font-semibold transition hover:-translate-y-0.5 flex items-center gap-2" style="border:1px solid var(--sr-border-strong)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          Star on GitHub
+        </a>
       </div>
-    </section>
-  </main>
+    </div>
+  </section>
 
-  <footer class="border-t border-black/10 dark:border-white/10 py-5 text-center text-xs font-mono text-pine-700 dark:text-pine-200">
-    <p>SoundRoot • KDE Plasma audio routing applet • Tailwind landing page</p>
-    <div class="mt-2 flex items-center justify-center gap-4 text-[11px]">
-      <a class="underline-offset-4 hover:underline" href="privacy-policy.html">Privacy Policy</a>
-      <a class="underline-offset-4 hover:underline" href="terms-of-use.html">Terms of Use</a>
+  <!-- FOOTER -->
+  <footer style="border-top:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+    <div class="mx-auto max-w-5xl px-5 py-10 grid md:grid-cols-3 gap-8">
+      <div>
+        <a href="index.html" class="flex items-center gap-2 mb-3">
+          <img class="h-7 w-7 rounded-lg" style="border:1px solid var(--sr-border-strong)" src="assets/icon.png" alt="SoundRoot" />
+          <span class="font-bold">SoundRoot</span>
+        </a>
+        <p class="text-xs leading-relaxed" style="color:var(--sr-fg-muted)">KDE Plasma audio routing applet. MIT licensed. Built with PipeWire and Qt 6.</p>
+      </div>
+      <div>
+        <p class="text-xs font-mono uppercase tracking-widest mb-3" style="color:var(--sr-fg-muted)">Pages</p>
+        <ul class="space-y-2 text-sm" style="color:var(--sr-fg-secondary)">
+          <li><a href="features.html" class="hover:underline">Features</a></li>
+          <li><a href="install.html" class="hover:underline">Install</a></li>
+          <li><a href="privacy-policy.html" class="hover:underline">Privacy Policy</a></li>
+          <li><a href="terms-of-use.html" class="hover:underline">Terms of Use</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="text-xs font-mono uppercase tracking-widest mb-3" style="color:var(--sr-fg-muted)">Links</p>
+        <ul class="space-y-2 text-sm" style="color:var(--sr-fg-secondary)">
+          <li><a href="https://github.com/" target="_blank" rel="noopener" class="hover:underline">GitHub</a></li>
+          <li><a href="https://store.kde.org" target="_blank" rel="noopener" class="hover:underline">KDE Store</a></li>
+          <li><a href="https://kde.org" target="_blank" rel="noopener" class="hover:underline">KDE Project</a></li>
+          <li><a href="https://pipewire.org" target="_blank" rel="noopener" class="hover:underline">PipeWire</a></li>
+        </ul>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--sr-border-subtle)" class="py-4 text-center text-xs font-mono" style="color:var(--sr-fg-muted)">
+      &copy; 2026 SoundRoot &middot; MIT License
     </div>
   </footer>
 
-  <script>
-    (function () {
-      const storageKey = "soundroot-theme";
-      const btn = document.getElementById("themeToggle");
-      const mq = window.matchMedia("(prefers-color-scheme: dark)");
-
-      function resolveTheme() {
-        const saved = localStorage.getItem(storageKey);
-        if (saved === "dark" || saved === "light") {
-          return saved;
-        }
-        return mq.matches ? "dark" : "light";
-      }
-
-      function applyTheme(theme) {
-        document.documentElement.classList.toggle("dark", theme === "dark");
-        btn.textContent = theme === "dark" ? "Dark Theme" : "Light Theme";
-        btn.setAttribute("aria-label", "Current theme: " + theme + ". Click to toggle.");
-      }
-
-      function saveAndApply(theme) {
-        localStorage.setItem(storageKey, theme);
-        applyTheme(theme);
-      }
-
-      applyTheme(resolveTheme());
-
-      btn.addEventListener("click", function () {
-        const isDark = document.documentElement.classList.contains("dark");
-        saveAndApply(isDark ? "light" : "dark");
-      });
-
-      mq.addEventListener("change", function (event) {
-        if (!localStorage.getItem(storageKey)) {
-          applyTheme(event.matches ? "dark" : "light");
-        }
-      });
-    })();
-  </script>
+  <script src="nav.js"></script>
 </body>
 </html>
