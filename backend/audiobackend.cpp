@@ -176,6 +176,7 @@ void PulseAudioBackend::destroyCombinedSink(const QString &name)
         if (it == m_combinedModules.end()) return;
         moduleIdx = it.value();
         m_combinedModules.erase(it);
+        m_combinedSlaves.remove(name);
     }
 
     pa_threaded_mainloop_lock(m_mainloop);
@@ -383,12 +384,12 @@ void PulseAudioBackend::routeStreamToSinks(uint32_t sinkInputIndex,
 {
     if (!m_context || !m_connected || sinkNames.isEmpty()) return;
 
-    // Clean up any previous per-stream combine sink
     const QString combinedName =
         QStringLiteral("audiorouter_stream_%1").arg(sinkInputIndex);
-    destroyCombinedSink(combinedName);
 
     if (sinkNames.size() == 1) {
+        // Single sink — destroy any existing combine for this stream
+        destroyCombinedSink(combinedName);
         moveInputToSink(sinkInputIndex, sinkNames.first());
         return;
     }
@@ -410,9 +411,39 @@ void PulseAudioBackend::routeStreamToSinks(uint32_t sinkInputIndex,
     if (availableSinks.isEmpty()) return;
 
     if (availableSinks.size() == 1) {
+        destroyCombinedSink(combinedName);
         moveInputToSink(sinkInputIndex, availableSinks.first());
         return;
     }
+
+    // Check if a combine-sink with the same slaves already exists
+    {
+        QMutexLocker lock(&m_mutex);
+        if (m_combinedModules.contains(combinedName)) {
+            auto existingSlaves = m_combinedSlaves.value(combinedName);
+            if (existingSlaves == availableSinks) {
+                // Combine-sink is correct — just ensure stream is on it
+                for (const auto &sink : m_sinks) {
+                    if (sink.name == combinedName) {
+                        // Check if stream is already on this sink
+                        for (const auto &si : m_sinkInputs) {
+                            if (si.index == sinkInputIndex && si.sinkIndex == sink.index)
+                                return;  // Already correctly routed
+                        }
+                        // Stream exists but on wrong sink — move it
+                        moveSinkInput(sinkInputIndex, sink.index);
+                        return;
+                    }
+                }
+                // Combine-sink module exists but sink not yet in m_sinks —
+                // wait for PA to register it (will be picked up by next reapply)
+                return;
+            }
+        }
+    }
+
+    // Different slaves needed — destroy old and create new
+    destroyCombinedSink(combinedName);
 
     // Find channels for this stream
     uint8_t channels = 2;
@@ -427,6 +458,10 @@ void PulseAudioBackend::routeStreamToSinks(uint32_t sinkInputIndex,
     }
 
     // Create combine sink and move stream to it
+    {
+        QMutexLocker lock(&m_mutex);
+        m_combinedSlaves[combinedName] = availableSinks;
+    }
     createCombinedSink(combinedName, availableSinks);
 
     QVector<QPair<uint32_t, uint8_t>> inputs;
@@ -755,17 +790,25 @@ void PulseAudioBackend::sinkInputInfoCallback(pa_context * /*c*/,
     auto *self = static_cast<PulseAudioBackend *>(userdata);
 
     if (eol > 0) {
+        int newCount;
         {
             QMutexLocker lock(&self->m_mutex);
             self->m_sinkInputs = self->m_pendingSinkInputs;
+            newCount = self->m_sinkInputs.size();
         }
         self->m_pendingSinkInputs.clear();  // prevent next enumeration from appending to stale data
         QMetaObject::invokeMethod(self, "sinkInputsChanged", Qt::QueuedConnection);
-        // Only trigger re-apply when a brand-new stream appeared, not on
-        // every volume/move CHANGE that we ourselves issue.
-        if (self->m_hasNewSinkInput) {
+        // Only trigger re-apply when the post-filter stream count actually
+        // grew.  m_hasNewSinkInput alone isn't enough because combine-sink
+        // virtual sub-streams fire PA_SUBSCRIPTION_EVENT_NEW but are then
+        // filtered out — they should not trigger a reapply loop.
+        if (self->m_hasNewSinkInput && newCount > self->m_lastSinkInputCount) {
             self->m_hasNewSinkInput = false;
+            self->m_lastSinkInputCount = newCount;
             QMetaObject::invokeMethod(self, "sinkInputAdded", Qt::QueuedConnection);
+        } else {
+            self->m_hasNewSinkInput = false;
+            self->m_lastSinkInputCount = newCount;
         }
         return;
     }

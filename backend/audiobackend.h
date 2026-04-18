@@ -143,6 +143,7 @@ private:
     QVector<PASinkInfo>         m_sinks;
     QVector<PASinkInputInfo>    m_sinkInputs;
     QMap<QString, uint32_t>     m_combinedModules;   // name → module index
+    QMap<QString, QStringList>   m_combinedSlaves;    // name → slave sink names
 
     // Pending buffers for atomic refresh (only accessed from PA thread)
     QVector<PASinkInfo>         m_pendingSinks;
@@ -152,6 +153,7 @@ private:
     // Read and cleared in sinkInputInfoCallback(eol). Never needs a mutex since
     // both callers run on the PA mainloop thread.
     bool     m_hasNewSinkInput  = false;
+    int      m_lastSinkInputCount = 0;  // post-filter count for detecting real new streams
 
     // Generation counters – bumped in subscribeCallback each time a new
     // enumeration starts.  The sinkInputInfoCallback / sinkInfoCallback
