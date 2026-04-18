@@ -35,8 +35,8 @@ PlasmaExtras.Representation {
     property real dragEndX: 0
     property real dragEndY: 0
     property int hoveredConnectionIdx: -1
-    property var sinkVolumes: ({})   // sinkName → volume 0-100
-    property int masterVolume: 100
+    // masterVolume is the raw PA default-sink volume. readonly — never assigned manually.
+    readonly property int masterVolume: Plasmoid.masterVolume ?? 100
     property bool scrollSyncing: false
 
     readonly property var linkColors: ["#4a90d9", "#50c878", "#e74c3c", "#f39c12", "#9b59b6",
@@ -50,42 +50,11 @@ PlasmaExtras.Representation {
         rebuildConnectionsFromModel()
     }
 
-    function getSinkVolume(sinkName) {
-        return sinkVolumes[sinkName] !== undefined ? sinkVolumes[sinkName] : 100
-    }
-
-    function setSinkVolume(sinkName, vol) {
-        var newVols = Object.assign({}, sinkVolumes)
-        newVols[sinkName] = vol
-        sinkVolumes = newVols
-        if (!fullRoot.routeModel) return
-        for (var i = 0; i < fullRoot.routeModel.count; i++) {
-            var midx = fullRoot.routeModel.index(i, 0)
-            var outNames = fullRoot.routeModel.data(midx, Qt.UserRole + 2)
-            if (outNames && outNames.indexOf(sinkName) >= 0)
-                fullRoot.routeModel.setRouteVolume(i, vol)
-        }
-    }
-
-    function applyMasterVolume() {
-        var newVols = Object.assign({}, sinkVolumes)
-        for (var k in newVols) newVols[k] = masterVolume
-        sinkVolumes = newVols
-        if (!fullRoot.routeModel) return
-        for (var i = 0; i < fullRoot.routeModel.count; i++)
-            fullRoot.routeModel.setRouteVolume(i, masterVolume)
-    }
-
     function activateRoomAt(idx) {
         if (!fullRoot.groupModel) return
-        var n = fullRoot.groupModel.count
-        for (var i = 0; i < n; i++) {
-            if (i !== idx && fullRoot.groupModel.isGroupActive(i))
-                fullRoot.groupModel.toggleActive(i)
-        }
-        if (!fullRoot.groupModel.isGroupActive(idx))
-            fullRoot.groupModel.toggleActive(idx)
-        fullRoot.selectRoom(idx)
+        Plasmoid.applyGroup(idx)   // C++ enforces single-room + sets active state
+        fullRoot.selectRoom(idx)   // Rebuilds per-stream connections from saved routes
+        applyPerStreamRouting()    // Apply exact per-stream moves
     }
 
     function selectNextRoom() {
@@ -110,6 +79,27 @@ PlasmaExtras.Representation {
         var c = linkColors[nextColorIdx % linkColors.length]
         nextColorIdx++
         return c
+    }
+
+    // Hit-test: find which node card is at position (mx, my) in connectionArea
+    function findNodeAt(mx, my) {
+        for (var i = 0; i < appListView.count; i++) {
+            var appItem = appListView.itemAtIndex(i)
+            if (!appItem) continue
+            var ap = appItem.mapToItem(connectionArea, 0, 0)
+            if (mx >= ap.x && mx <= ap.x + appItem.width &&
+                my >= ap.y && my <= ap.y + appItem.height)
+                return appItem.nodeKey
+        }
+        for (var j = 0; j < outListView.count; j++) {
+            var sinkItem = outListView.itemAtIndex(j)
+            if (!sinkItem) continue
+            var sp = sinkItem.mapToItem(connectionArea, 0, 0)
+            if (mx >= sp.x && mx <= sp.x + sinkItem.width &&
+                my >= sp.y && my <= sp.y + sinkItem.height)
+                return sinkItem.nodeKey
+        }
+        return ""
     }
 
     // Find which "group color" a node belongs to (follow connection chain)
@@ -201,101 +191,176 @@ PlasmaExtras.Representation {
         connectionCanvas.requestPaint()
     }
 
-    // Sync QML connections array → C++ routeModel
+    // Sync QML connections array → C++ routeModel only.
+    // Live PA routing only happens when the room is explicitly activated.
     function syncConnectionsToModel() {
         if (!fullRoot.routeModel) return
 
-        // Build routes: for each app node, find all sinks it connects to (transitively)
-        var appNodes = {}
-        var sinkNodes = {}
+        // Build ordinal map: inputIndex → { appName, ordinal }
+        // Ordinal = order of appearance among same-app streams
+        var appOrdCounters = {}
+        var streamInfo = {} // inputIndex → { appName, ordinal }
+        if (fullRoot.sinkInputModel) {
+            for (var s = 0; s < fullRoot.sinkInputModel.count; s++) {
+                var sidx = fullRoot.sinkInputModel.index(s, 0)
+                var sInputIdx = fullRoot.sinkInputModel.data(sidx, Qt.UserRole + 1)
+                var sAppName  = fullRoot.sinkInputModel.data(sidx, Qt.UserRole + 2)
+                if (!(sAppName in appOrdCounters)) appOrdCounters[sAppName] = 0
+                streamInfo[sInputIdx] = { appName: sAppName, ordinal: appOrdCounters[sAppName] }
+                appOrdCounters[sAppName]++
+            }
+        }
 
-        // Collect all unique nodes
+        // Build per-stream routes: "appName\tordinal" → [sinkNames]
+        var streamRoutes = {}
+
         for (var i = 0; i < connections.length; i++) {
             var c = connections[i]
-            if (c.from.indexOf("app:") === 0) appNodes[c.from] = true
-            if (c.to.indexOf("app:") === 0) appNodes[c.to] = true
-            if (c.from.indexOf("sink:") === 0) sinkNodes[c.from] = true
-            if (c.to.indexOf("sink:") === 0) sinkNodes[c.to] = true
-        }
+            var inputKey = ""
+            var sinkKey = ""
 
-        // For each app, BFS to find connected sinks
-        var routes = {} // appName -> [sinkName, ...]
-        for (var appKey in appNodes) {
-            var appName = appKey.substring(4)
-            var visited = {}
-            var queue = [appKey]
-            visited[appKey] = true
-            var connectedSinks = []
-            while (queue.length > 0) {
-                var cur = queue.shift()
-                if (cur.indexOf("sink:") === 0) {
-                    connectedSinks.push(cur.substring(5))
-                }
-                for (var j = 0; j < connections.length; j++) {
-                    var cc = connections[j]
-                    var next = ""
-                    if (cc.from === cur) next = cc.to
-                    else if (cc.to === cur) next = cc.from
-                    if (next !== "" && !visited[next]) {
-                        visited[next] = true
-                        queue.push(next)
-                    }
-                }
+            if (c.from.indexOf("input:") === 0 && c.to.indexOf("sink:") === 0) {
+                inputKey = c.from; sinkKey = c.to
+            } else if (c.from.indexOf("sink:") === 0 && c.to.indexOf("input:") === 0) {
+                sinkKey = c.from; inputKey = c.to
+            } else if (c.from.indexOf("app:") === 0 && c.to.indexOf("sink:") === 0) {
+                var legKey = c.from.substring(4) + "\t0"
+                var legSink = c.to.substring(5)
+                if (!streamRoutes[legKey]) streamRoutes[legKey] = []
+                if (streamRoutes[legKey].indexOf(legSink) < 0) streamRoutes[legKey].push(legSink)
+                continue
+            } else if (c.from.indexOf("sink:") === 0 && c.to.indexOf("app:") === 0) {
+                var legKey2 = c.to.substring(4) + "\t0"
+                var legSink2 = c.from.substring(5)
+                if (!streamRoutes[legKey2]) streamRoutes[legKey2] = []
+                if (streamRoutes[legKey2].indexOf(legSink2) < 0) streamRoutes[legKey2].push(legSink2)
+                continue
+            } else {
+                continue
             }
-            if (connectedSinks.length > 0)
-                routes[appName] = connectedSinks
+
+            var inputIdx = parseInt(inputKey.substring(6))
+            var sinkName = sinkKey.substring(5)
+            var info = streamInfo[inputIdx]
+            if (!info) continue
+
+            var routeKey = info.appName + "\t" + info.ordinal
+            if (!streamRoutes[routeKey]) streamRoutes[routeKey] = []
+            if (streamRoutes[routeKey].indexOf(sinkName) < 0) streamRoutes[routeKey].push(sinkName)
         }
 
-        // Clear existing routes and add new ones
+        // Persist routes to model
         while (fullRoot.routeModel.count > 0)
             fullRoot.routeModel.removeRoute(0)
+        for (var key in streamRoutes)
+            fullRoot.routeModel.addRoute(key, streamRoutes[key])
 
-        for (var app in routes) {
-            fullRoot.routeModel.addRoute(app, routes[app])
-        }
-
-        // If the current room is active, apply routes to PulseAudio immediately
+        // If this room is already active, do per-stream routing directly
         if (fullRoot.selectedRoomIndex >= 0 && fullRoot.groupModel &&
-            fullRoot.groupModel.isGroupActive(fullRoot.selectedRoomIndex)) {
-            Plasmoid.applyGroup(fullRoot.selectedRoomIndex)
+                fullRoot.groupModel.isGroupActive(fullRoot.selectedRoomIndex)) {
+            applyPerStreamRouting()
         }
     }
 
-    // Rebuild connections from current routeModel
+    // Apply per-stream routing from current connections array.
+    // Collects all sinks per input, then uses routeStreamToSinks which
+    // creates combine-sinks when a stream targets multiple outputs.
+    function applyPerStreamRouting() {
+        var inputSinks = {} // inputIdx → [sinkName, ...]
+        for (var k = 0; k < connections.length; k++) {
+            var conn = connections[k]
+            var iKey = "", sKey = ""
+            if (conn.from.indexOf("input:") === 0 && conn.to.indexOf("sink:") === 0) {
+                iKey = conn.from; sKey = conn.to
+            } else if (conn.from.indexOf("sink:") === 0 && conn.to.indexOf("input:") === 0) {
+                sKey = conn.from; iKey = conn.to
+            }
+            if (iKey !== "" && sKey !== "") {
+                var idx = parseInt(iKey.substring(6))
+                var sink = sKey.substring(5)
+                if (!inputSinks[idx]) inputSinks[idx] = []
+                if (inputSinks[idx].indexOf(sink) < 0) inputSinks[idx].push(sink)
+            }
+        }
+
+        for (var inputIdx in inputSinks) {
+            Plasmoid.routeStreamToSinks(parseInt(inputIdx), inputSinks[inputIdx])
+        }
+    }
+
+    // Rebuild connections from current routeModel, matching saved per-stream
+    // routes (appName\tordinal) to currently running streams by ordinal.
     function rebuildConnectionsFromModel() {
         if (!fullRoot.routeModel) return
         var newConns = []
         nextColorIdx = 0
 
+        // Build ordinal map for current live streams
+        var appStreams = {} // appName → [inputIdx, inputIdx, ...]  in model order
+        if (fullRoot.sinkInputModel) {
+            for (var j = 0; j < fullRoot.sinkInputModel.count; j++) {
+                var iidx = fullRoot.sinkInputModel.index(j, 0)
+                var inputIdx = fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 1)
+                var inputApp = fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 2)
+                if (!appStreams[inputApp]) appStreams[inputApp] = []
+                appStreams[inputApp].push(inputIdx)
+            }
+        }
+
         for (var i = 0; i < fullRoot.routeModel.count; i++) {
-            var idx = fullRoot.routeModel.index(i, 0)
-            var appName = fullRoot.routeModel.data(idx, Qt.UserRole + 1) // SourceAppRole
-            var outputNames = fullRoot.routeModel.data(idx, Qt.UserRole + 2) // OutputNamesRole
+            var ridx = fullRoot.routeModel.index(i, 0)
+            var sourceKey   = fullRoot.routeModel.data(ridx, Qt.UserRole + 1) // SourceAppRole
+            var outputNames = fullRoot.routeModel.data(ridx, Qt.UserRole + 2) // OutputNamesRole
+            if (!outputNames || !outputNames.length) continue
             var color = pickColor()
-            if (outputNames && outputNames.length) {
-                for (var j = 0; j < outputNames.length; j++) {
-                    newConns.push({
-                        from: "app:" + appName,
-                        to: "sink:" + outputNames[j],
-                        color: color
-                    })
+
+            // Parse "appName\tordinal" or legacy plain "appName"
+            var tabPos = sourceKey.indexOf("\t")
+            var baseAppName = tabPos >= 0 ? sourceKey.substring(0, tabPos) : sourceKey
+            var ordinal     = tabPos >= 0 ? parseInt(sourceKey.substring(tabPos + 1)) : -1
+
+            var streams = appStreams[baseAppName] || []
+
+            if (ordinal >= 0 && ordinal < streams.length) {
+                // Per-stream route: connect this specific stream
+                var fromKey = "input:" + streams[ordinal]
+                for (var k = 0; k < outputNames.length; k++)
+                    newConns.push({ from: fromKey, to: "sink:" + outputNames[k], color: color })
+            } else if (ordinal < 0 && streams.length > 0) {
+                // Legacy route (no ordinal): connect ALL streams of this app
+                for (var j2 = 0; j2 < streams.length; j2++) {
+                    for (var k2 = 0; k2 < outputNames.length; k2++)
+                        newConns.push({ from: "input:" + streams[j2], to: "sink:" + outputNames[k2], color: color })
                 }
+            } else {
+                // Stream not currently available — store as app: placeholder
+                for (var k3 = 0; k3 < outputNames.length; k3++)
+                    newConns.push({ from: "app:" + baseAppName, to: "sink:" + outputNames[k3], color: color })
             }
         }
         connections = newConns
         connectionCanvas.requestPaint()
     }
 
-    // Get edge position of a node card in the connectionArea coordinate space
-    // App cards → right edge, Sink cards → left edge
+    // Get wire endpoint: right-center of app card, left-center of sink card
     function getNodeEdge(nodeKey) {
         var item = null
-        if (nodeKey.indexOf("app:") === 0) {
-            var appName = nodeKey.substring(4)
+        if (nodeKey.indexOf("input:") === 0) {
+            var inputIdx = parseInt(nodeKey.substring(6))
             for (var i = 0; i < appListView.count; i++) {
                 var appItem = appListView.itemAtIndex(i)
-                if (appItem && appItem.nodeName === appName) {
+                if (appItem && appItem.inputIndex === inputIdx) {
                     item = appItem; break
+                }
+            }
+            if (!item) return null
+            return item.mapToItem(connectionArea, item.width, item.height / 2)
+        } else if (nodeKey.indexOf("app:") === 0) {
+            var appName = nodeKey.substring(4)
+            for (var i2 = 0; i2 < appListView.count; i2++) {
+                var appItem2 = appListView.itemAtIndex(i2)
+                if (appItem2 && appItem2.nodeName === appName) {
+                    item = appItem2; break
                 }
             }
             if (!item) return null
@@ -322,6 +387,10 @@ PlasmaExtras.Representation {
             var p1 = getNodeEdge(conn.from)
             var p2 = getNodeEdge(conn.to)
             if (!p1 || !p2) continue
+            // Normalize: app/input left, sink right
+            if (conn.from.indexOf("sink:") === 0) {
+                var _tmp = p1; p1 = p2; p2 = _tmp
+            }
             var cpOff = Math.abs(p2.x - p1.x) * 0.4
             for (var s = 0; s <= 1.0; s += 0.02) {
                 var it = 1 - s
@@ -490,16 +559,13 @@ PlasmaExtras.Representation {
                                 PlasmaComponents.Switch {
                                     checked: model.groupActive
                                     onToggled: {
-                                        if (fullRoot.groupModel) {
-                                            if (checked) {
-                                                // Radio behavior: deactivate all other rooms first
-                                                for (var i = 0; i < fullRoot.groupModel.rowCount(); i++) {
-                                                    if (i !== index && fullRoot.groupModel.isGroupActive(i))
-                                                        fullRoot.groupModel.toggleActive(i)
-                                                }
-                                            }
-                                            fullRoot.groupModel.toggleActive(index)
+                                        if (checked) {
+                                            fullRoot.activateRoomAt(index)
+                                        } else {
+                                            Plasmoid.deactivateGroup(index)
                                         }
+                                        // Restore binding — user toggle breaks it
+                                        checked = Qt.binding(function() { return model.groupActive })
                                     }
                                 }
 
@@ -674,6 +740,11 @@ PlasmaExtras.Representation {
                                 var p1 = fullRoot.getNodeEdge(conn.from)
                                 var p2 = fullRoot.getNodeEdge(conn.to)
                                 if (!p1 || !p2) continue
+                                // Normalize: app/input is always left (p1), sink always right (p2)
+                                // so the bezier curve bows inward naturally
+                                if (conn.from.indexOf("sink:") === 0) {
+                                    var _tmp = p1; p1 = p2; p2 = _tmp
+                                }
 
                                 var isHovered = (i === fullRoot.hoveredConnectionIdx)
                                 ctx.strokeStyle = isHovered ? "#ff4444" : conn.color
@@ -767,12 +838,14 @@ PlasmaExtras.Representation {
                                             outListView.contentY = contentY
                                             fullRoot.scrollSyncing = false
                                         }
+                                        connectionCanvas.requestPaint()
                                     }
 
                                     delegate: Rectangle {
                                         id: appCard
                                         property string nodeName: model.appName || ""
-                                        property string nodeKey: "app:" + nodeName
+                                        property int inputIndex: model.inputIndex || 0
+                                        property string nodeKey: "input:" + inputIndex
                                         width: appListView.width - appListView.leftMargin - appListView.rightMargin
                                         height: appCardRow.implicitHeight + Kirigami.Units.smallSpacing * 2
                                         radius: Kirigami.Units.smallSpacing
@@ -807,12 +880,24 @@ PlasmaExtras.Representation {
                                                 Layout.preferredHeight: Kirigami.Units.iconSizes.medium
                                             }
 
-                                            PlasmaComponents.Label {
+                                            ColumnLayout {
                                                 Layout.fillWidth: true
-                                                text: model.appName || "Unknown"
-                                                font.pointSize: Kirigami.Theme.defaultFont.pointSize
-                                                font.bold: true
-                                                elide: Text.ElideRight
+                                                spacing: 0
+                                                PlasmaComponents.Label {
+                                                    Layout.fillWidth: true
+                                                    text: model.appName || "Unknown"
+                                                    font.pointSize: Kirigami.Theme.defaultFont.pointSize
+                                                    font.bold: true
+                                                    elide: Text.ElideRight
+                                                }
+                                                PlasmaComponents.Label {
+                                                    Layout.fillWidth: true
+                                                    visible: model.mediaName && model.mediaName !== model.appName
+                                                    text: model.mediaName || ""
+                                                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                                    opacity: 0.65
+                                                    elide: Text.ElideRight
+                                                }
                                             }
 
                                             // Connection dot / drag handle
@@ -830,8 +915,9 @@ PlasmaExtras.Representation {
                                                     anchors.fill: parent
                                                     anchors.margins: -8
                                                     cursorShape: Qt.CrossCursor
+                                                    preventStealing: true
                                                     onPressed: function(mouse) {
-                                                        var mapped = appCard.mapToItem(connectionArea, appCard.width, appCard.height / 2)
+                                                        var mapped = appDragDot.mapToItem(connectionArea, appDragDot.width / 2, appDragDot.height / 2)
                                                         fullRoot.isDragging = true
                                                         fullRoot.dragFrom = appCard.nodeKey
                                                         fullRoot.dragStartX = mapped.x
@@ -839,6 +925,27 @@ PlasmaExtras.Representation {
                                                         fullRoot.dragEndX = mapped.x
                                                         fullRoot.dragEndY = mapped.y
                                                         connectionCanvas.requestPaint()
+                                                    }
+                                                    onPositionChanged: function(mouse) {
+                                                        if (fullRoot.isDragging) {
+                                                            var pos = mapToItem(connectionArea, mouse.x, mouse.y)
+                                                            fullRoot.dragEndX = pos.x
+                                                            fullRoot.dragEndY = pos.y
+                                                            connectionCanvas.requestPaint()
+                                                        }
+                                                    }
+                                                    onReleased: function(mouse) {
+                                                        if (fullRoot.isDragging) {
+                                                            var pos = mapToItem(connectionArea, mouse.x, mouse.y)
+                                                            var target = fullRoot.findNodeAt(pos.x, pos.y)
+                                                            if (target !== "" && target !== fullRoot.dragFrom) {
+                                                                fullRoot.addConnection(fullRoot.dragFrom, target)
+                                                                fullRoot.isDragging = false
+                                                                fullRoot.dragFrom = ""
+                                                                connectionCanvas.requestPaint()
+                                                            }
+                                                            // else: keep isDragging=true → click-click mode via dragTracker
+                                                        }
                                                     }
                                                 }
                                             }
@@ -893,6 +1000,18 @@ PlasmaExtras.Representation {
                                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                                 horizontalAlignment: Text.AlignHCenter
                             }
+
+                            // Relay scroll events to the app list so the center area also scrolls
+                            MouseArea {
+                                anchors.fill: parent
+                                acceptedButtons: Qt.NoButton
+                                onWheel: function(wheel) {
+                                    if (!fullRoot.scrollSyncing) {
+                                        appListView.flick(0, wheel.angleDelta.y * 5)
+                                    }
+                                }
+                                z: -1
+                            }
                         }
 
                         // ════ OUTPUT DEVICES COLUMN ══════════════════
@@ -939,6 +1058,7 @@ PlasmaExtras.Representation {
                                                 appListView.contentY = contentY
                                                 fullRoot.scrollSyncing = false
                                             }
+                                            connectionCanvas.requestPaint()
                                         }
 
                                     delegate: Rectangle {
@@ -992,8 +1112,9 @@ PlasmaExtras.Representation {
                                                         anchors.fill: parent
                                                         anchors.margins: -8
                                                         cursorShape: Qt.CrossCursor
+                                                        preventStealing: true
                                                         onPressed: function(mouse) {
-                                                            var mapped = sinkCard.mapToItem(connectionArea, 0, sinkCard.height / 2)
+                                                            var mapped = sinkDragDot.mapToItem(connectionArea, sinkDragDot.width / 2, sinkDragDot.height / 2)
                                                             fullRoot.isDragging = true
                                                             fullRoot.dragFrom = sinkCard.nodeKey
                                                             fullRoot.dragStartX = mapped.x
@@ -1001,6 +1122,27 @@ PlasmaExtras.Representation {
                                                             fullRoot.dragEndX = mapped.x
                                                             fullRoot.dragEndY = mapped.y
                                                             connectionCanvas.requestPaint()
+                                                        }
+                                                        onPositionChanged: function(mouse) {
+                                                            if (fullRoot.isDragging) {
+                                                                var pos = mapToItem(connectionArea, mouse.x, mouse.y)
+                                                                fullRoot.dragEndX = pos.x
+                                                                fullRoot.dragEndY = pos.y
+                                                                connectionCanvas.requestPaint()
+                                                            }
+                                                        }
+                                                        onReleased: function(mouse) {
+                                                            if (fullRoot.isDragging) {
+                                                                var pos = mapToItem(connectionArea, mouse.x, mouse.y)
+                                                                var target = fullRoot.findNodeAt(pos.x, pos.y)
+                                                                if (target !== "" && target !== fullRoot.dragFrom) {
+                                                                    fullRoot.addConnection(fullRoot.dragFrom, target)
+                                                                    fullRoot.isDragging = false
+                                                                    fullRoot.dragFrom = ""
+                                                                    connectionCanvas.requestPaint()
+                                                                }
+                                                                // else: keep isDragging=true → click-click mode via dragTracker
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -1032,26 +1174,35 @@ PlasmaExtras.Representation {
                                             RowLayout {
                                                 Layout.fillWidth: true
                                                 spacing: Kirigami.Units.smallSpacing
-                                                Kirigami.Icon {
-                                                    source: fullRoot.getSinkVolume(sinkCard.nodeName) === 0
-                                                            ? "audio-volume-muted"
-                                                            : fullRoot.getSinkVolume(sinkCard.nodeName) < 40
-                                                              ? "audio-volume-low" : "audio-volume-medium"
-                                                    Layout.preferredWidth:  Kirigami.Units.iconSizes.small
-                                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                                    opacity: 0.7
+
+                                                // Mute toggle button
+                                                PlasmaComponents.ToolButton {
+                                                    checkable: true
+                                                    checked: model.sinkMuted
+                                                    icon.name: model.sinkMuted ? "audio-volume-muted"
+                                                               : sinkSlider.value === 0 ? "audio-volume-muted"
+                                                               : sinkSlider.value < 40  ? "audio-volume-low"
+                                                                                        : "audio-volume-medium"
+                                                    Layout.preferredWidth:  Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing * 2
+                                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing * 2
+                                                    onClicked: Plasmoid.toggleSinkMute(sinkCard.nodeName)
                                                 }
                                                 QQC2.Slider {
+                                                    id: sinkSlider
                                                     Layout.fillWidth: true
-                                                    from: 0; to: 100
-                                                    value: fullRoot.getSinkVolume(sinkCard.nodeName)
-                                                    onMoved: fullRoot.setSinkVolume(sinkCard.nodeName, Math.round(value))
+                                                    from: 0; to: 150
+                                                    enabled: !model.sinkMuted
+                                                    opacity: model.sinkMuted ? 0.4 : 1.0
+                                                    property int backendVol: model.sinkVolumePercent ?? 100
+                                                    onBackendVolChanged: if (!pressed) value = backendVol
+                                                    Component.onCompleted: value = backendVol
+                                                    onMoved: Plasmoid.setSinkVolumeByName(sinkCard.nodeName, Math.round(value))
                                                 }
                                                 PlasmaComponents.Label {
-                                                    text: fullRoot.getSinkVolume(sinkCard.nodeName) + "%"
+                                                    text: model.sinkMuted ? "muted" : Math.round(sinkSlider.value) + "%"
                                                     font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                                    opacity: 0.65
-                                                    Layout.minimumWidth: Kirigami.Units.gridUnit * 2
+                                                    opacity: model.sinkMuted ? 0.5 : 0.65
+                                                    Layout.minimumWidth: Kirigami.Units.gridUnit * 2.5
                                                 }
                                             }
                                         }
@@ -1126,100 +1277,90 @@ PlasmaExtras.Representation {
                         }
                     }
 
-                    // ── Global drag tracking MouseArea ──────────────
+                    // ── Drag tracker: follows cursor in click-click mode ──
                     MouseArea {
                         id: dragTracker
                         anchors.fill: parent
                         z: 10
-                        enabled: fullRoot.isDragging
+                        visible: fullRoot.isDragging
                         hoverEnabled: true
-                        preventStealing: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        cursorShape: Qt.CrossCursor
 
                         onPositionChanged: function(mouse) {
                             if (fullRoot.isDragging) {
-                                fullRoot.dragEndX = mouse.x
-                                fullRoot.dragEndY = mouse.y
+                                var pos = mapToItem(connectionArea, mouse.x, mouse.y)
+                                fullRoot.dragEndX = pos.x
+                                fullRoot.dragEndY = pos.y
                                 connectionCanvas.requestPaint()
                             }
                         }
-
-                        onReleased: function(mouse) {
-                            if (fullRoot.isDragging) {
-                                // Check if we dropped on a valid target
-                                var target = findNodeAt(mouse.x, mouse.y)
-                                if (target !== "" && target !== fullRoot.dragFrom) {
-                                    fullRoot.addConnection(fullRoot.dragFrom, target)
-                                }
+                        onClicked: function(mouse) {
+                            if (!fullRoot.isDragging) return
+                            if (mouse.button === Qt.RightButton) {
+                                // Cancel drag
                                 fullRoot.isDragging = false
                                 fullRoot.dragFrom = ""
                                 connectionCanvas.requestPaint()
+                                return
                             }
-                        }
-
-                        function findNodeAt(mx, my) {
-                            // Check apps
-                            for (var i = 0; i < appListView.count; i++) {
-                                var appItem = appListView.itemAtIndex(i)
-                                if (!appItem) continue
-                                var ap = appItem.mapToItem(connectionArea, 0, 0)
-                                if (mx >= ap.x && mx <= ap.x + appItem.width &&
-                                    my >= ap.y && my <= ap.y + appItem.height) {
-                                    return appItem.nodeKey
-                                }
+                            var pos = mapToItem(connectionArea, mouse.x, mouse.y)
+                            var target = fullRoot.findNodeAt(pos.x, pos.y)
+                            if (target !== "" && target !== fullRoot.dragFrom) {
+                                fullRoot.addConnection(fullRoot.dragFrom, target)
                             }
-                            // Check sinks
-                            for (var j = 0; j < outListView.count; j++) {
-                                var sinkItem = outListView.itemAtIndex(j)
-                                if (!sinkItem) continue
-                                var sp = sinkItem.mapToItem(connectionArea, 0, 0)
-                                if (mx >= sp.x && mx <= sp.x + sinkItem.width &&
-                                    my >= sp.y && my <= sp.y + sinkItem.height) {
-                                    return sinkItem.nodeKey
-                                }
-                            }
-                            return ""
+                            fullRoot.isDragging = false
+                            fullRoot.dragFrom = ""
+                            connectionCanvas.requestPaint()
                         }
                     }
                 }
-            }
-        }
-    }
 
-    // Master volume — placed at bottom so it applies to visible devices
-    RowLayout {
-        Layout.fillWidth: true
-        visible: fullRoot.selectedRoomIndex >= 0
-        spacing: Kirigami.Units.smallSpacing
+                // ── Master volume ── bottom of room content area ──────────────
+                Kirigami.Separator {
+                    Layout.fillWidth: true
+                    opacity: 0.2
+                    visible: fullRoot.selectedRoomIndex >= 0
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin:  Kirigami.Units.smallSpacing
+                    Layout.rightMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    visible: fullRoot.selectedRoomIndex >= 0
+                    spacing: Kirigami.Units.smallSpacing
 
-        Kirigami.Icon {
-            source: fullRoot.masterVolume === 0 ? "audio-volume-muted"
-                  : fullRoot.masterVolume < 40  ? "audio-volume-low"
-                  : fullRoot.masterVolume < 75  ? "audio-volume-medium"
-                  : "audio-volume-high"
-            Layout.preferredWidth:  Kirigami.Units.iconSizes.small
-            Layout.preferredHeight: Kirigami.Units.iconSizes.small
-            opacity: 0.75
-        }
-        PlasmaComponents.Label {
-            text: "Master"
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
-            opacity: 0.6
-        }
-        QQC2.Slider {
-            id: masterSlider
-            Layout.fillWidth: true
-            from: 0; to: 100
-            value: fullRoot.masterVolume
-            onMoved: {
-                fullRoot.masterVolume = Math.round(value)
-                fullRoot.applyMasterVolume()
+                    Kirigami.Icon {
+                        source: fullRoot.masterVolume === 0 ? "audio-volume-muted"
+                              : fullRoot.masterVolume < 40  ? "audio-volume-low"
+                              : fullRoot.masterVolume < 75  ? "audio-volume-medium"
+                              : "audio-volume-high"
+                        Layout.preferredWidth:  Kirigami.Units.iconSizes.small
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        opacity: 0.75
+                    }
+                    PlasmaComponents.Label {
+                        text: "Master"
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        opacity: 0.6
+                    }
+                    QQC2.Slider {
+                        id: masterSlider
+                        Layout.fillWidth: true
+                        from: 0; to: 150
+                        property int backendVol: fullRoot.masterVolume
+                        onBackendVolChanged: if (!pressed) value = backendVol
+                        Component.onCompleted: value = backendVol
+                        onMoved: Plasmoid.setMasterVolume(Math.round(value))
+                    }
+                    PlasmaComponents.Label {
+                        text: Math.round(masterSlider.value) + "%"
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        opacity: 0.7
+                        Layout.minimumWidth: Kirigami.Units.gridUnit * 2
+                    }
+                }
             }
-        }
-        PlasmaComponents.Label {
-            text: fullRoot.masterVolume + "%"
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
-            opacity: 0.7
-            Layout.minimumWidth: Kirigami.Units.gridUnit * 2
         }
     }
 

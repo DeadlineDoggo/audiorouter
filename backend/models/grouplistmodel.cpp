@@ -76,6 +76,15 @@ void GroupListModel::toggleActive(int row)
     save();
 }
 
+void GroupListModel::setGroupActive(int row, bool active)
+{
+    if (row < 0 || row >= m_groups.size()) return;
+    if (m_groups[row].active == active) return;
+    m_groups[row].active = active;
+    emit dataChanged(index(row), index(row), { ActiveRole });
+    save();
+}
+
 QString GroupListModel::groupId(int row) const
 {
     if (row < 0 || row >= m_groups.size()) return {};

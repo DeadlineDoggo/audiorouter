@@ -49,7 +49,37 @@ QString SinkInputModel::appNameAt(int row) const
 
 void SinkInputModel::refresh()
 {
+    auto newInputs = m_backend->availableSinkInputs();
+
+    // Fast path: same count, same entries → check for property-only changes
+    if (newInputs.size() == m_sinkInputs.size()) {
+        bool structurallyEqual = true;
+        for (int i = 0; i < newInputs.size(); ++i) {
+            if (newInputs[i].index != m_sinkInputs[i].index ||
+                newInputs[i].appName != m_sinkInputs[i].appName) {
+                structurallyEqual = false;
+                break;
+            }
+        }
+        if (structurallyEqual) {
+            // Only emit dataChanged for rows whose properties changed
+            for (int i = 0; i < newInputs.size(); ++i) {
+                const auto &o = m_sinkInputs[i];
+                const auto &n = newInputs[i];
+                if (o.sinkIndex != n.sinkIndex || o.mediaName != n.mediaName ||
+                    o.iconName != n.iconName) {
+                    m_sinkInputs[i] = n;
+                    emit dataChanged(index(i), index(i));
+                }
+            }
+            // Don't emit countChanged — count didn't change
+            return;
+        }
+    }
+
+    // Structural change — full reset
     beginResetModel();
-    m_sinkInputs = m_backend->availableSinkInputs();
+    m_sinkInputs = std::move(newInputs);
     endResetModel();
+    emit countChanged();
 }

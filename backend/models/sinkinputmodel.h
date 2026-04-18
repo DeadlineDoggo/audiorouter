@@ -11,6 +11,7 @@
  */
 class SinkInputModel : public QAbstractListModel {
     Q_OBJECT
+    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
 public:
     enum Roles {
@@ -28,6 +29,9 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     Q_INVOKABLE QString appNameAt(int row) const;
+
+signals:
+    void countChanged();
 
 public slots:
     void refresh();

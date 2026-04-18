@@ -13,6 +13,9 @@ struct PASinkInfo {
     uint32_t index = PA_INVALID_INDEX;
     QString  name;          ///< PulseAudio internal name
     QString  description;   ///< Human-readable description
+    int      volumePercent = 100; ///< Current output volume (0-150)
+    uint8_t  channels = 2;       ///< Channel count for volume operations
+    bool     isMuted = false;     ///< Whether the sink is muted
 };
 
 struct PASinkInputInfo {
@@ -50,8 +53,7 @@ public:
 
     // ── Queries (thread-safe, return copies) ────────────────────────────
     QVector<PASinkInfo>      availableSinks()      const;
-    QVector<PASinkInputInfo> availableSinkInputs() const;
-
+    QVector<PASinkInputInfo> availableSinkInputs() const;    int                      defaultSinkVolume()   const;
     // ── Actions ─────────────────────────────────────────────────────────
     void moveSinkInput(uint32_t sinkInputIndex, uint32_t sinkIndex);
     void setSinkInputVolume(uint32_t sinkInputIndex,
@@ -68,11 +70,37 @@ public:
                     int volumePercent = 100);
     void removeRoute(const QString &appName);
 
+    /// Move all streams from appName back to the default sink.
+    void restoreRoute(const QString &appName);
+
+    /// Set the volume of the default output sink (0–150%).
+    void setDefaultSinkVolume(int percent);
+
+    /// Set the volume of a specific sink by its PA name (0–150%).
+    void setSinkVolumeByName(const QString &sinkName, int percent);
+
+    /// Toggle mute state of a specific sink by name.
+    void toggleSinkMuteByName(const QString &sinkName);
+
+    /// Move a specific sink-input (by PA index) to a named sink.
+    void moveInputToSink(uint32_t sinkInputIndex, const QString &sinkName);
+
+    /// Route a specific sink-input to one or more sinks.
+    /// Creates a combine-sink when multiple sinks are specified.
+    void routeStreamToSinks(uint32_t sinkInputIndex, const QStringList &sinkNames);
+
+    /// Destroy all per-stream combine sinks (audiorouter_stream_*).
+    void cleanupStreamCombineSinks();
+
 signals:
     void sinksChanged();
     void sinkInputsChanged();
+    /// Emitted only when a truly new stream appears (not on move/volume change).
+    void sinkInputAdded();
     void serverConnected();
     void serverDisconnected();
+    /// Emitted whenever the default sink’s volume changes.
+    void defaultSinkVolumeChanged(int volumePercent);
     void errorOccurred(const QString &message);
 
 private:
@@ -98,6 +126,9 @@ private:
     static void sinkInfoCallback(pa_context *c,
                                  const pa_sink_info *info,
                                  int eol, void *userdata);
+    static void serverInfoCallback(pa_context *c,
+                                   const pa_server_info *info,
+                                   void *userdata);
     static void sinkInputInfoCallback(pa_context *c,
                                       const pa_sink_input_info *info,
                                       int eol, void *userdata);
@@ -116,6 +147,20 @@ private:
     // Pending buffers for atomic refresh (only accessed from PA thread)
     QVector<PASinkInfo>         m_pendingSinks;
     QVector<PASinkInputInfo>    m_pendingSinkInputs;
+
+    // Set from PA thread (subscribeCallback) when a NEW sink-input event arrives.
+    // Read and cleared in sinkInputInfoCallback(eol). Never needs a mutex since
+    // both callers run on the PA mainloop thread.
+    bool     m_hasNewSinkInput  = false;
+
+    // Generation counters – bumped in subscribeCallback each time a new
+    // enumeration starts.  The sinkInputInfoCallback / sinkInfoCallback
+    // eol handler ignores results whose generation doesn't match.
+    uint64_t m_sinkInputGen     = 0;
+    uint64_t m_sinkGen          = 0;
+
+    QString  m_defaultSinkName;            // guarded by m_mutex
+    int      m_defaultSinkVolume = 100;    // guarded by m_mutex
 
     bool m_connected = false;
 };

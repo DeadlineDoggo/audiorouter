@@ -62,13 +62,18 @@ void AudioRouterApplet::applyGroup(int groupIndex)
     auto *group = m_groupModel.groupAt(groupIndex);
     if (!group) return;
 
+    // Enforce single-room: deactivate every OTHER active group first
+    for (int i = 0; i < m_groupModel.rowCount(); ++i) {
+        if (i != groupIndex && m_groupModel.isGroupActive(i))
+            deactivateGroup(i);
+    }
+
     for (const auto &route : group->routes)
         m_audioBackend.applyRoute(route.sourceAppName,
                                   route.outputSinkNames,
                                   route.volumePercent);
 
-    group->active = true;
-    m_groupModel.save();
+    m_groupModel.setGroupActive(groupIndex, true);
 }
 
 void AudioRouterApplet::deactivateGroup(int groupIndex)
@@ -77,10 +82,14 @@ void AudioRouterApplet::deactivateGroup(int groupIndex)
     if (!group) return;
 
     for (const auto &route : group->routes)
+        m_audioBackend.restoreRoute(route.sourceAppName);
+
+    for (const auto &route : group->routes)
         m_audioBackend.removeRoute(route.sourceAppName);
 
-    group->active = false;
-    m_groupModel.save();
+    m_audioBackend.cleanupStreamCombineSinks();
+
+    m_groupModel.setGroupActive(groupIndex, false);
 }
 
 void AudioRouterApplet::applyAllActiveGroups()
@@ -92,32 +101,54 @@ void AudioRouterApplet::applyAllActiveGroups()
     }
 }
 
+void AudioRouterApplet::setMasterVolume(int percent)
+{
+    m_audioBackend.setDefaultSinkVolume(percent);
+}
+
+void AudioRouterApplet::setSinkVolumeByName(const QString &sinkName, int percent)
+{
+    m_audioBackend.setSinkVolumeByName(sinkName, percent);
+}
+
+void AudioRouterApplet::toggleSinkMute(const QString &sinkName)
+{
+    m_audioBackend.toggleSinkMuteByName(sinkName);
+}
+
+void AudioRouterApplet::moveInput(int inputIndex, const QString &sinkName)
+{
+    m_audioBackend.moveInputToSink(static_cast<uint32_t>(inputIndex), sinkName);
+}
+
+void AudioRouterApplet::routeStreamToSinks(int inputIndex, const QStringList &sinkNames)
+{
+    m_audioBackend.routeStreamToSinks(static_cast<uint32_t>(inputIndex), sinkNames);
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // Internals
 // ═════════════════════════════════════════════════════════════════════════════
 
 void AudioRouterApplet::setupConnections()
 {
-    connect(&m_groupModel, &GroupListModel::groupChanged,
-            this, [this](int row) {
-                const auto *group = m_groupModel.groupAt(row);
-                if (!group) return;
-                if (group->active)
-                    applyGroup(row);
-                else
-                    deactivateGroup(row);
-            });
-
     connect(&m_audioBackend, &PulseAudioBackend::serverConnected,
             this, [this]() {
-                QMetaObject::invokeMethod(this, "applyAllActiveGroups",
-                                          Qt::QueuedConnection);
+                // Delay long enough for the initial sink/stream list to be
+                // populated via the async PA callbacks before we try to apply.
+                QTimer::singleShot(600, this, &AudioRouterApplet::applyAllActiveGroups);
             });
 
-    connect(&m_audioBackend, &PulseAudioBackend::sinkInputsChanged,
+    // Only re-apply when a genuinely NEW stream appears, not on every
+    // move/volume CHANGE that we ourselves issue – that would create an
+    // infinite re-apply loop.
+    connect(&m_audioBackend, &PulseAudioBackend::sinkInputAdded,
             this, [this]() {
                 m_reapplyTimer.start();
             });
+
+    connect(&m_audioBackend, &PulseAudioBackend::defaultSinkVolumeChanged,
+            this, &AudioRouterApplet::masterVolumeChanged);
 
     connect(&m_audioBackend, &PulseAudioBackend::errorOccurred,
             this, [](const QString &msg) {

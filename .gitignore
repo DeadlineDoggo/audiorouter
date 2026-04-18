@@ -3,6 +3,7 @@ notes.md
 
 # Local tooling artifacts
 .codex
+.github/
 
 # Build output
 build/

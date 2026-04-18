@@ -15,7 +15,9 @@ public:
     enum Roles {
         IndexRole       = Qt::UserRole + 1,
         NameRole,
-        DescriptionRole
+        DescriptionRole,
+        VolumeRole,
+        MutedRole
     };
 
     explicit SinkModel(PulseAudioBackend *backend, QObject *parent = nullptr);

@@ -23,6 +23,8 @@ QVariant SinkModel::data(const QModelIndex &index, int role) const
     case IndexRole:       return sink.index;
     case NameRole:        return sink.name;
     case DescriptionRole: return sink.description;
+    case VolumeRole:      return sink.volumePercent;
+    case MutedRole:       return sink.isMuted;
     case Qt::DisplayRole: return sink.description;
     }
     return {};
@@ -31,9 +33,11 @@ QVariant SinkModel::data(const QModelIndex &index, int role) const
 QHash<int, QByteArray> SinkModel::roleNames() const
 {
     return {
-        { IndexRole,       "sinkIndex"       },
-        { NameRole,        "sinkName"        },
-        { DescriptionRole, "sinkDescription" }
+        { IndexRole,       "sinkIndex"         },
+        { NameRole,        "sinkName"           },
+        { DescriptionRole, "sinkDescription"   },
+        { VolumeRole,      "sinkVolumePercent" },
+        { MutedRole,       "sinkMuted"         }
     };
 }
 
@@ -51,7 +55,34 @@ QString SinkModel::sinkDescriptionAt(int row) const
 
 void SinkModel::refresh()
 {
+    auto newSinks = m_backend->availableSinks();
+
+    // Fast path: same count, same sinks → check for property-only changes
+    if (newSinks.size() == m_sinks.size()) {
+        bool structurallyEqual = true;
+        for (int i = 0; i < newSinks.size(); ++i) {
+            if (newSinks[i].index != m_sinks[i].index ||
+                newSinks[i].name  != m_sinks[i].name) {
+                structurallyEqual = false;
+                break;
+            }
+        }
+        if (structurallyEqual) {
+            for (int i = 0; i < newSinks.size(); ++i) {
+                const auto &o = m_sinks[i];
+                const auto &n = newSinks[i];
+                if (o.volumePercent != n.volumePercent || o.isMuted != n.isMuted ||
+                    o.description != n.description) {
+                    m_sinks[i] = n;
+                    emit dataChanged(index(i), index(i));
+                }
+            }
+            return;
+        }
+    }
+
+    // Structural change — full reset
     beginResetModel();
-    m_sinks = m_backend->availableSinks();
+    m_sinks = std::move(newSinks);
     endResetModel();
 }

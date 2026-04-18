@@ -36,6 +36,9 @@ public:
     Q_INVOKABLE QString groupId(int row) const;
     Q_INVOKABLE bool    isGroupActive(int row) const;
 
+    /// Set active without toggle; emits dataChanged from within the model.
+    void setGroupActive(int row, bool active);
+
     // ── C++ convenience ─────────────────────────────────────────────────
     AudioGroup       *groupAt(int row);
     const AudioGroup *groupAt(int row) const;

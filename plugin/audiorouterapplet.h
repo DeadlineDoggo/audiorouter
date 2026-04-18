@@ -29,6 +29,7 @@ class AudioRouterApplet : public Plasma::Applet {
     Q_PROPERTY(RouteListModel*  routeModel      READ routeModel      CONSTANT)
     Q_PROPERTY(SinkModel*       sinkModel       READ sinkModel       CONSTANT)
     Q_PROPERTY(SinkInputModel*  sinkInputModel  READ sinkInputModel  CONSTANT)
+    Q_PROPERTY(int masterVolume READ masterVolume NOTIFY masterVolumeChanged)
 
 public:
     explicit AudioRouterApplet(QObject *parent, const KPluginMetaData &data,
@@ -40,14 +41,23 @@ public:
     RouteListModel  *routeModel()     { return &m_routeModel; }
     SinkModel       *sinkModel()      { return &m_sinkModel; }
     SinkInputModel  *sinkInputModel() { return &m_sinkInputModel; }
+    int              masterVolume()   const { return m_audioBackend.defaultSinkVolume(); }
 
     // ── QML-invokable actions ───────────────────────────────────────────
     Q_INVOKABLE void applyGroup(int groupIndex);
     Q_INVOKABLE void deactivateGroup(int groupIndex);
     Q_INVOKABLE void applyAllActiveGroups();
+    Q_INVOKABLE void setMasterVolume(int percent);
+    Q_INVOKABLE void setSinkVolumeByName(const QString &sinkName, int percent);
+    Q_INVOKABLE void toggleSinkMute(const QString &sinkName);
+    /// Direct per-stream move: PA sinkInputIndex → named sink.
+    Q_INVOKABLE void moveInput(int inputIndex, const QString &sinkName);
+    /// Route a specific stream to one or more sinks (combine-sink for multi).
+    Q_INVOKABLE void routeStreamToSinks(int inputIndex, const QStringList &sinkNames);
 signals:
     void nextRoomActivated();
     void prevRoomActivated();
+    void masterVolumeChanged(int volumePercent);
 private:
     void setupConnections();
 
