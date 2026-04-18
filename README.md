@@ -4,9 +4,11 @@
 
 SoundRoot is a KDE Plasma 6 plasmoid that lets you create audio "rooms" — named groups of source-to-sink connections — and switch between them instantly with keyboard shortcuts or a click.
 
+![Version](https://img.shields.io/badge/version-0.8.0--beta-orange)
 ![License](https://img.shields.io/badge/license-GPL--2.0--or--later-blue)
 ![Plasma](https://img.shields.io/badge/KDE%20Plasma-6.0%2B-informational)
 ![PipeWire](https://img.shields.io/badge/PipeWire-compatible-green)
+![Status](https://img.shields.io/badge/status-beta-yellow)
 
 ---
 

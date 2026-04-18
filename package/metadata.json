@@ -12,7 +12,7 @@
         ],
         "Category": "Multimedia",
         "License": "GPL-2.0-or-later",
-        "Version": "1.0.0",
+        "Version": "0.8.0-beta",
         "Website": "https://store.kde.org"
     },
     "KPackageStructure": "Plasma/Applet",
