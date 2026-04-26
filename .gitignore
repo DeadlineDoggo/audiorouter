@@ -32,3 +32,6 @@ soundroot-*.plasmoid
 # Funny files
 _*
 make-release-archive.sh
+
+# Presentation files
+presentation/

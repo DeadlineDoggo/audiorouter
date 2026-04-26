@@ -82,3 +82,82 @@ details[open] > summary {
 ::-webkit-scrollbar-track { background: var(--sr-bg-base); }
 ::-webkit-scrollbar-thumb { background: var(--sr-border-strong); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--sr-accent); }
+
+/* ===== 3-D Laptop animations ===== */
+
+/* Hero laptop — wide rotation swing */
+.laptop-hero-scene {
+  perspective: 1100px;
+  width: 100%;
+}
+
+.laptop-hero-3d {
+  animation: laptop-hero-turn 9s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+  transform-origin: 50% 55%;
+  will-change: transform;
+}
+
+@keyframes laptop-hero-turn {
+  0%   { transform: rotateX(5deg)  rotateY(-26deg) translateY(0px);   }
+  22%  { transform: rotateX(3deg)  rotateY(-3deg)  translateY(-14px); }
+  50%  { transform: rotateX(5deg)  rotateY(26deg)  translateY(0px);   }
+  72%  { transform: rotateX(3deg)  rotateY(3deg)   translateY(-14px); }
+  100% { transform: rotateX(5deg)  rotateY(-26deg) translateY(0px);   }
+}
+
+/* Glow shadow that drifts left↔right with the rotation */
+.laptop-hero-glow {
+  animation: laptop-hero-glow-anim 9s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}
+
+@keyframes laptop-hero-glow-anim {
+  0%   { opacity: 0.20; transform: scaleX(0.58) translateX(32%);  }
+  22%  { opacity: 0.45; transform: scaleX(0.82) translateX(5%);   }
+  50%  { opacity: 0.20; transform: scaleX(0.58) translateX(-32%); }
+  72%  { opacity: 0.45; transform: scaleX(0.82) translateX(-5%);  }
+  100% { opacity: 0.20; transform: scaleX(0.58) translateX(32%);  }
+}
+
+/* Screenshots laptop — gentle rock */
+.laptop-ss-scene {
+  perspective: 1400px;
+}
+
+.laptop-ss-3d {
+  animation: laptop-ss-rock 8s ease-in-out infinite;
+  transform-origin: 50% 55%;
+  will-change: transform;
+}
+
+@keyframes laptop-ss-rock {
+  0%   { transform: rotateX(4deg) rotateY(-13deg) translateY(0px);  }
+  50%  { transform: rotateX(2deg) rotateY(13deg)  translateY(-7px); }
+  100% { transform: rotateX(4deg) rotateY(-13deg) translateY(0px);  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .laptop-hero-3d,
+  .laptop-ss-3d,
+  .laptop-hero-glow,
+  [style*="sr-popup-float"],
+  [style*="sr-tray-pulse"] { animation: none !important; }
+}
+
+/* Laptop mockup — keyboard key helpers */
+.lk { flex:1; height:9px; background:#2c2c2c; border-radius:2px; box-shadow:0 1px 0 rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.04); }
+.lk.w  { flex:1.6; }
+.lk.xl { flex:2.3; }
+.lk.sp { flex:5; }
+.lk-row { display:flex; gap:1.5px; margin-bottom:2px; }
+
+/* SoundRoot widget popup floating animation */
+@keyframes sr-popup-float {
+  0%, 100% { transform: translateY(0px);   box-shadow: 0 8px 40px rgba(74,144,226,.28), 0 2px 16px rgba(0,0,0,.6); }
+  50%       { transform: translateY(-4px);  box-shadow: 0 14px 52px rgba(74,144,226,.38), 0 4px 24px rgba(0,0,0,.5); }
+}
+
+/* System tray icon pulsing glow */
+@keyframes sr-tray-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74,144,226,.0),  border-color: rgba(74,144,226,.45); }
+  50%       { box-shadow: 0 0 6px 2px rgba(74,144,226,.5), border-color: rgba(74,144,226,.9); }
+}
