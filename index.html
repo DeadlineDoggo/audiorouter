@@ -46,6 +46,7 @@
         <a href="features.html" class="px-3 py-1.5 rounded-md transition" style="--hover-bg:var(--sr-accent-subtle)" onmouseover="this.style.background='var(--sr-accent-subtle)';this.style.color='var(--sr-fg-primary)'" onmouseout="this.style.background='';this.style.color='var(--sr-fg-secondary)'">Features</a>
         <a href="install.html" class="px-3 py-1.5 rounded-md transition" onmouseover="this.style.background='var(--sr-accent-subtle)';this.style.color='var(--sr-fg-primary)'" onmouseout="this.style.background='';this.style.color='var(--sr-fg-secondary)'">Install</a>
         <a href="privacy-policy.html" class="px-3 py-1.5 rounded-md transition" onmouseover="this.style.background='var(--sr-accent-subtle)';this.style.color='var(--sr-fg-primary)'" onmouseout="this.style.background='';this.style.color='var(--sr-fg-secondary)'">Privacy</a>
+        <a href="#contact" class="px-3 py-1.5 rounded-md transition" onmouseover="this.style.background='var(--sr-accent-subtle)';this.style.color='var(--sr-fg-primary)'" onmouseout="this.style.background='';this.style.color='var(--sr-fg-secondary)'">Contact</a>
       </nav>
       <div class="flex items-center gap-2">
         <button id="themeToggle" aria-label="Toggle theme" class="h-8 px-3 rounded-full text-xs font-mono uppercase tracking-widest transition" style="border:1px solid var(--sr-border-strong);color:var(--sr-fg-secondary)">
@@ -76,7 +77,7 @@
         </p>
         <ul class="mt-6 grid grid-cols-2 gap-2 text-sm" style="color:var(--sr-fg-secondary)">
           <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--sr-green)"></span>Many-to-many routing</li>
-          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--sr-green)"></span>Per-group volume</li>
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--sr-green)"></span>Per-route volume</li>
           <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--sr-green)"></span>Global shortcuts</li>
           <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--sr-green)"></span>Drag-reorder rooms</li>
           <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--sr-green)"></span>Colour-coded wires</li>
@@ -85,28 +86,20 @@
         <div class="mt-8 flex flex-wrap gap-3">
           <a href="install.html" class="rounded-full text-white px-6 py-3 text-sm font-bold transition hover:-translate-y-0.5" style="background:var(--sr-accent);box-shadow:0 8px 40px rgba(74,144,226,.35)">Install Now</a>
           <a href="features.html" class="rounded-full px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5" style="border:1px solid var(--sr-border-strong);background:color-mix(in srgb,var(--sr-bg-surface) 50%,transparent)">See All Features</a>
-          <a href="https://github.com/" target="_blank" rel="noopener" class="rounded-full px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5 flex items-center gap-2" style="border:1px solid var(--sr-border-strong);background:color-mix(in srgb,var(--sr-bg-surface) 50%,transparent)">
+          <a href="https://github.com/DeadlineDoggo/audiorouter" target="_blank" rel="noopener" class="rounded-full px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5 flex items-center gap-2" style="border:1px solid var(--sr-border-strong);background:color-mix(in srgb,var(--sr-bg-surface) 50%,transparent)">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
             GitHub
           </a>
         </div>
       </div>
-      <!-- Hero card -->
+      <!-- Hero: real screenshot of SoundRoot on KDE Plasma -->
       <div class="opacity-0 animate-rise" style="animation-delay:180ms;animation-fill-mode:forwards">
-        <div class="rounded-2xl overflow-hidden" style="border:1px solid var(--sr-border-strong);box-shadow:0 32px 80px rgba(0,0,0,.55);background:var(--sr-bg-surface)">
-          <div class="flex items-center gap-1.5 px-4 py-2.5" style="border-bottom:1px solid var(--sr-border-subtle);background:var(--sr-bg-elevated)">
-            <span class="w-2.5 h-2.5 rounded-full bg-red-500/70"></span>
-            <span class="w-2.5 h-2.5 rounded-full bg-yellow-500/70"></span>
-            <span class="w-2.5 h-2.5 rounded-full bg-green-500/70"></span>
-            <span class="ml-2 font-mono text-[11px]" style="color:var(--sr-fg-muted)">SoundRoot — KDE Panel Widget</span>
-          </div>
-          <img class="w-full aspect-[1.48/1] object-cover" src="assets/hero-widget.svg" alt="SoundRoot widget" />
-          <div class="px-4 py-2 flex justify-between items-center text-[11px] font-mono" style="background:var(--sr-bg-elevated);color:var(--sr-fg-muted)">
-            <span>3 apps · 2 outputs · 1 active room</span>
-            <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full animate-pulse" style="background:var(--sr-green)"></span>Live routing</span>
-          </div>
-        </div>
-        <div class="mt-3 flex gap-2 justify-end flex-wrap text-xs font-mono" style="color:var(--sr-fg-secondary)">
+        <img src="assets/pcsoundroot01.png"
+             alt="SoundRoot widget popped up from the KDE Plasma system tray"
+             style="display:block;width:100%;height:auto;border-radius:12px;filter:drop-shadow(0 24px 56px rgba(0,0,0,.70))" />
+        <!-- Ground glow -->
+        <div class="laptop-hero-glow mx-auto rounded-full blur-3xl" style="height:14px;width:55%;background:var(--sr-accent);margin-top:4px"></div>
+        <div class="mt-4 flex gap-2 justify-end flex-wrap text-xs font-mono" style="color:var(--sr-fg-secondary)">
           <span class="px-3 py-1 rounded-full" style="border:1px solid var(--sr-border-strong)">PipeWire 1.x</span>
           <span class="px-3 py-1 rounded-full" style="border:1px solid var(--sr-border-strong)">Qt 6 / Plasma 6</span>
           <span class="px-3 py-1 rounded-full" style="border:1px solid var(--sr-border-strong)">Wayland native</span>
@@ -222,32 +215,78 @@
       <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">Screenshots</p>
       <h2 class="text-3xl md:text-4xl font-bold">A widget that earns its panel space.</h2>
     </div>
-    <div class="rounded-3xl overflow-hidden" style="border:1px solid var(--sr-border-strong);box-shadow:0 32px 80px rgba(0,0,0,.55)">
-      <div class="flex items-center gap-1.5 px-4 py-2.5" style="background:var(--sr-bg-elevated);border-bottom:1px solid var(--sr-border-subtle)">
-        <span class="w-2.5 h-2.5 rounded-full bg-red-500/70"></span>
-        <span class="w-2.5 h-2.5 rounded-full bg-yellow-500/70"></span>
-        <span class="w-2.5 h-2.5 rounded-full bg-green-500/70"></span>
-        <span class="ml-auto font-mono text-[11px]" style="color:var(--sr-fg-muted)">Connection Board — Gaming Room active</span>
-      </div>
-      <img class="w-full aspect-[2.2/1] object-cover" src="assets/board-wide.svg" alt="SoundRoot connection board" />
+
+    <!-- Main screenshot -->
+    <div class="mx-auto" style="max-width:820px">
+      <img src="assets/pcsoundroot.png"
+           alt="SoundRoot — full UI overview on KDE Plasma desktop"
+           style="display:block;width:100%;height:auto;border-radius:12px;filter:drop-shadow(0 20px 48px rgba(0,0,0,.65))" />
+      <div class="mx-auto mt-1 rounded-full blur-2xl opacity-40" style="height:6px;width:55%;background:#000"></div>
     </div>
-    <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-      <figure class="overflow-hidden rounded-xl" style="border:1px solid var(--sr-border-subtle)">
-        <img class="w-full aspect-square object-cover" src="assets/thumb-panel.svg" alt="Panel icon" />
-        <figcaption class="px-2 py-1.5 text-[10px] font-mono" style="color:var(--sr-fg-muted);background:var(--sr-bg-surface)">Panel icon · status dot</figcaption>
-      </figure>
-      <figure class="overflow-hidden rounded-xl" style="border:1px solid var(--sr-border-subtle)">
-        <img class="w-full aspect-square object-cover" src="assets/thumb-sidebar.svg" alt="Sidebar room list" />
-        <figcaption class="px-2 py-1.5 text-[10px] font-mono" style="color:var(--sr-fg-muted);background:var(--sr-bg-surface)">Room sidebar · drag handles</figcaption>
-      </figure>
-      <figure class="overflow-hidden rounded-xl" style="border:1px solid var(--sr-border-subtle)">
-        <img class="w-full aspect-square object-cover" src="assets/thumb-edit.svg" alt="Room edit popup" />
-        <figcaption class="px-2 py-1.5 text-[10px] font-mono" style="color:var(--sr-fg-muted);background:var(--sr-bg-surface)">Edit popup · icon + colour</figcaption>
-      </figure>
-      <figure class="overflow-hidden rounded-xl" style="border:1px solid var(--sr-border-subtle)">
-        <img class="w-full aspect-square object-cover" src="assets/thumb-shortcuts.svg" alt="Shortcuts config" />
-        <figcaption class="px-2 py-1.5 text-[10px] font-mono" style="color:var(--sr-fg-muted);background:var(--sr-bg-surface)">Shortcuts config page</figcaption>
-      </figure>
+
+    <!-- 5 THUMBNAIL SCREENSHOTS in desktop-monitor frames -->
+    <div class="mt-12 grid grid-cols-2 md:grid-cols-5 gap-6">
+
+      <!-- Monitor 1 -->
+      <div class="flex flex-col items-center">
+        <div class="w-full" style="background:#18182a;border:2px solid #363658;border-radius:10px 10px 4px 4px;padding:8px 8px 0;box-shadow:0 4px 24px rgba(0,0,0,.4)">
+          <div class="rounded overflow-hidden" style="border:1px solid #26263c">
+            <img class="w-full aspect-square object-cover" src="assets/thumb-panel.svg" alt="Panel icon" />
+          </div>
+        </div>
+        <div class="w-5" style="height:10px;background:linear-gradient(180deg,#18182a,#0e0e1c);border-left:2px solid #363658;border-right:2px solid #363658"></div>
+        <div class="rounded-full" style="width:44px;height:6px;background:#26263c;border:1px solid #363658"></div>
+        <p class="mt-1.5 text-[10px] font-mono text-center" style="color:var(--sr-fg-muted)">Panel icon · status dot</p>
+      </div>
+
+      <!-- Monitor 2 -->
+      <div class="flex flex-col items-center">
+        <div class="w-full" style="background:#18182a;border:2px solid #363658;border-radius:10px 10px 4px 4px;padding:8px 8px 0;box-shadow:0 4px 24px rgba(0,0,0,.4)">
+          <div class="rounded overflow-hidden" style="border:1px solid #26263c">
+            <img class="w-full aspect-square object-cover" src="assets/thumb-sidebar.svg" alt="Sidebar room list" />
+          </div>
+        </div>
+        <div class="w-5" style="height:10px;background:linear-gradient(180deg,#18182a,#0e0e1c);border-left:2px solid #363658;border-right:2px solid #363658"></div>
+        <div class="rounded-full" style="width:44px;height:6px;background:#26263c;border:1px solid #363658"></div>
+        <p class="mt-1.5 text-[10px] font-mono text-center" style="color:var(--sr-fg-muted)">Room sidebar · drag handles</p>
+      </div>
+
+      <!-- Monitor 3 -->
+      <div class="flex flex-col items-center">
+        <div class="w-full" style="background:#18182a;border:2px solid #363658;border-radius:10px 10px 4px 4px;padding:8px 8px 0;box-shadow:0 4px 24px rgba(0,0,0,.4)">
+          <div class="rounded overflow-hidden" style="border:1px solid #26263c">
+            <img class="w-full aspect-square object-cover" src="assets/thumb-edit.svg" alt="Room edit popup" />
+          </div>
+        </div>
+        <div class="w-5" style="height:10px;background:linear-gradient(180deg,#18182a,#0e0e1c);border-left:2px solid #363658;border-right:2px solid #363658"></div>
+        <div class="rounded-full" style="width:44px;height:6px;background:#26263c;border:1px solid #363658"></div>
+        <p class="mt-1.5 text-[10px] font-mono text-center" style="color:var(--sr-fg-muted)">Edit popup · icon + colour</p>
+      </div>
+
+      <!-- Monitor 4 -->
+      <div class="flex flex-col items-center">
+        <div class="w-full" style="background:#18182a;border:2px solid #363658;border-radius:10px 10px 4px 4px;padding:8px 8px 0;box-shadow:0 4px 24px rgba(0,0,0,.4)">
+          <div class="rounded overflow-hidden" style="border:1px solid #26263c">
+            <img class="w-full aspect-square object-cover" src="assets/thumb-shortcuts.svg" alt="Shortcuts config" />
+          </div>
+        </div>
+        <div class="w-5" style="height:10px;background:linear-gradient(180deg,#18182a,#0e0e1c);border-left:2px solid #363658;border-right:2px solid #363658"></div>
+        <div class="rounded-full" style="width:44px;height:6px;background:#26263c;border:1px solid #363658"></div>
+        <p class="mt-1.5 text-[10px] font-mono text-center" style="color:var(--sr-fg-muted)">Shortcuts config page</p>
+      </div>
+
+      <!-- Monitor 5 -->
+      <div class="flex flex-col items-center">
+        <div class="w-full" style="background:#18182a;border:2px solid #363658;border-radius:10px 10px 4px 4px;padding:8px 8px 0;box-shadow:0 4px 24px rgba(0,0,0,.4)">
+          <div class="rounded overflow-hidden" style="border:1px solid #26263c">
+            <img class="w-full aspect-square object-cover" src="assets/board-wide.svg" alt="Connection board" />
+          </div>
+        </div>
+        <div class="w-5" style="height:10px;background:linear-gradient(180deg,#18182a,#0e0e1c);border-left:2px solid #363658;border-right:2px solid #363658"></div>
+        <div class="rounded-full" style="width:44px;height:6px;background:#26263c;border:1px solid #363658"></div>
+        <p class="mt-1.5 text-[10px] font-mono text-center" style="color:var(--sr-fg-muted)">Connection board · Gaming Room</p>
+      </div>
+
     </div>
   </section>
 
@@ -296,10 +335,33 @@
       </p>
       <div class="relative mt-8 flex flex-wrap gap-3 justify-center">
         <a href="install.html" class="rounded-full text-white px-8 py-3.5 text-sm font-bold transition hover:-translate-y-0.5" style="background:var(--sr-accent);box-shadow:0 8px 40px rgba(74,144,226,.35)">Install SoundRoot</a>
-        <a href="https://github.com/" target="_blank" rel="noopener" class="rounded-full px-8 py-3.5 text-sm font-semibold transition hover:-translate-y-0.5 flex items-center gap-2" style="border:1px solid var(--sr-border-strong)">
+        <a href="https://github.com/DeadlineDoggo/audiorouter" target="_blank" rel="noopener" class="rounded-full px-8 py-3.5 text-sm font-semibold transition hover:-translate-y-0.5 flex items-center gap-2" style="border:1px solid var(--sr-border-strong)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
           Star on GitHub
         </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTACT -->
+  <section id="contact" class="mx-auto max-w-5xl px-5 py-16 md:py-20">
+    <div class="rounded-3xl px-8 py-12 md:px-14 md:py-16 relative overflow-hidden" style="border:1px solid var(--sr-border-strong);background:var(--sr-bg-surface)">
+      <div class="pointer-events-none absolute inset-0">
+        <div class="absolute -bottom-20 right-0 w-[400px] h-[300px] rounded-full blur-3xl opacity-[.05]" style="background:var(--sr-green)"></div>
+      </div>
+      <div class="relative max-w-xl">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">Contact</p>
+        <h2 class="text-3xl md:text-4xl font-bold leading-tight mb-3">Get in touch.</h2>
+        <p class="text-sm leading-relaxed mb-6" style="color:var(--sr-fg-secondary)">Found a bug? Have a feature idea? Want to contribute? Drop a message — the developer reads every email.</p>
+        <a href="mailto:jozkokremes@gmail.com"
+           class="inline-flex items-center gap-3 rounded-2xl px-6 py-4 font-semibold transition hover:-translate-y-0.5"
+           style="background:var(--sr-bg-elevated);border:1px solid var(--sr-border-strong);color:var(--sr-fg-primary)">
+          <span>
+            <span class="block text-xs font-mono uppercase tracking-widest mb-0.5" style="color:var(--sr-fg-muted)">Email</span>
+            jozkokremes@gmail.com
+          </span>
+        </a>
+        <p class="mt-4 text-xs" style="color:var(--sr-fg-muted)">You can also open a GitHub issue or start a discussion on the repo.</p>
       </div>
     </div>
   </section>
@@ -326,10 +388,11 @@
       <div>
         <p class="text-xs font-mono uppercase tracking-widest mb-3" style="color:var(--sr-fg-muted)">Links</p>
         <ul class="space-y-2 text-sm" style="color:var(--sr-fg-secondary)">
-          <li><a href="https://github.com/" target="_blank" rel="noopener" class="hover:underline">GitHub</a></li>
-          <li><a href="https://store.kde.org" target="_blank" rel="noopener" class="hover:underline">KDE Store</a></li>
+          <li><a href="https://github.com/DeadlineDoggo/audiorouter" target="_blank" rel="noopener" class="hover:underline">GitHub</a></li>
+          <li><a href="https://store.kde.org/p/2357238/" target="_blank" rel="noopener" class="hover:underline">KDE Store</a></li>
           <li><a href="https://kde.org" target="_blank" rel="noopener" class="hover:underline">KDE Project</a></li>
           <li><a href="https://pipewire.org" target="_blank" rel="noopener" class="hover:underline">PipeWire</a></li>
+          <li><a href="mailto:jozkokremes@gmail.com" class="hover:underline">Contact Developer</a></li>
         </ul>
       </div>
     </div>
