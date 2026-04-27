@@ -212,16 +212,6 @@
   <path d="M1110 195 C1138 195 1152 302 1174 302" stroke="url(#bnOrange)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
   <path d="M1110 197 C1138 197 1152 384 1174 384" stroke="url(#bnPurple)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
 
-  <!-- Volume badge on blue wire -->
-  <g transform="translate(1044,170)">
-    <rect x="-22" y="-10" width="44" height="20" rx="10" fill="#0a1714" stroke="#1e3c34"/>
-    <text x="0" y="4" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#4a90e2">85%</text>
-  </g>
-  <g transform="translate(1044,220)">
-    <rect x="-22" y="-10" width="44" height="20" rx="10" fill="#0a1714" stroke="#1e3c34"/>
-    <text x="0" y="4" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#50c878">60%</text>
-  </g>
-
   <!-- ── BOTTOM RIGHT: tagline + status ── -->
   <text x="1174" y="530" font-family="'Space Grotesk', sans-serif" font-size="15" font-weight="600" fill="#e2ede9">github.com/DeadlineDoggo/audiorouter</text>
   <circle cx="1174" cy="558" r="5" fill="#50c878"/>
