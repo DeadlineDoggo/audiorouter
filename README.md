@@ -27,7 +27,7 @@ SoundRoot is a KDE Plasma 6 plasmoid that lets you create audio "rooms" — name
 
 ### KDE Store
 
-Install directly from the KDE Store via Plasma's "Get New Widgets" dialog, or:
+Install directly from the [KDE Store](https://store.kde.org/p/2357238/) via Plasma's "Get New Widgets" dialog, or:
 
 ```bash
 # Search for SoundRoot in Discover / Add Widgets → Get New…
@@ -35,7 +35,7 @@ Install directly from the KDE Store via Plasma's "Get New Widgets" dialog, or:
 
 ### GitHub Releases
 
-Download the latest `.plasmoid` file from [Releases](https://github.com/AkiAkzworthy/soundroot/releases), then:
+Download the latest `.plasmoid` file from [Releases](https://github.com/deadlinedoggo/soundroot/releases), then:
 
 ```bash
 kpackagetool6 -i soundroot-*.plasmoid
@@ -44,7 +44,7 @@ kpackagetool6 -i soundroot-*.plasmoid
 ### Build from Source
 
 ```bash
-git clone https://github.com/AkiAkzworthy/soundroot.git
+git clone https://github.com/deadlinedoggo/soundroot.git
 cd soundroot
 mkdir build && cd build
 cmake .. -DCMAKE_INSTALL_PREFIX=$(kf6-config --prefix)
