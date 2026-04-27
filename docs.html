@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Docs — SoundRoot</title>
+  <meta name="description" content="SoundRoot documentation: what it is, how it works, configuration, shortcuts, troubleshooting and architecture for the KDE Plasma audio routing applet." />
+  <link rel="icon" type="image/png" href="assets/icon.png" />
+  <script>(function(){const s=localStorage.getItem("sr-theme"),d=window.matchMedia("(prefers-color-scheme:dark)").matches;document.documentElement.classList.toggle("dark",s?s==="dark":d);document.documentElement.classList.toggle("light",s?s==="light":!d);})()</script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={darkMode:"class",theme:{extend:{fontFamily:{display:["Space Grotesk","sans-serif"],mono:["IBM Plex Mono","monospace"]}}}}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .docs-toc a { transition: color .15s, background .15s; }
+    .docs-toc a:hover { color: var(--sr-accent); background: var(--sr-accent-subtle); }
+    .docs-section h2 { scroll-margin-top: 80px; }
+    .docs-section h3 { scroll-margin-top: 80px; }
+    .kbd {
+      display: inline-block;
+      padding: 2px 8px;
+      border: 1px solid var(--sr-border-strong);
+      border-bottom-width: 2px;
+      border-radius: 6px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: .78rem;
+      background: var(--sr-bg-elevated);
+      color: var(--sr-fg-primary);
+    }
+    code.inline {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: .85em;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--sr-accent-subtle);
+      color: var(--sr-accent);
+    }
+    pre.code-block {
+      background: var(--sr-bg-elevated);
+      border: 1px solid var(--sr-border-subtle);
+      border-radius: 12px;
+      padding: 16px 18px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: .82rem;
+      line-height: 1.55;
+      color: var(--sr-fg-primary);
+      overflow-x: auto;
+    }
+    pre.code-block .c { color: var(--sr-fg-muted); }
+    pre.code-block .k { color: var(--sr-accent); }
+    pre.code-block .s { color: var(--sr-success); }
+  </style>
+</head>
+<body class="font-display antialiased" style="background:var(--sr-bg-base);color:var(--sr-fg-primary)">
+  <div class="noise"></div>
+
+  <!-- NAV -->
+  <header style="border-bottom:1px solid var(--sr-border-subtle);backdrop-filter:blur(20px);background:color-mix(in srgb,var(--sr-bg-base) 70%,transparent)" class="sticky top-0 z-40">
+    <div class="mx-auto max-w-5xl px-5 h-14 flex items-center justify-between gap-4">
+      <a href="index.html" class="flex items-center gap-2.5 shrink-0">
+        <img class="h-7 w-7 rounded-lg" style="border:1px solid var(--sr-border-strong)" src="assets/icon.png" alt="SoundRoot" />
+        <span class="text-base font-bold tracking-wide">SoundRoot</span>
+      </a>
+      <nav class="hidden md:flex items-center gap-1 text-sm font-medium" style="color:var(--sr-fg-secondary)">
+        <a href="features.html" class="px-3 py-1.5 rounded-md" onmouseover="this.style.background='var(--sr-accent-subtle)'" onmouseout="this.style.background=''">Features</a>
+        <a href="install.html" class="px-3 py-1.5 rounded-md" onmouseover="this.style.background='var(--sr-accent-subtle)'" onmouseout="this.style.background=''">Install</a>
+        <a href="docs.html" class="px-3 py-1.5 rounded-md font-semibold" style="background:var(--sr-accent-subtle);color:var(--sr-accent)">Docs</a>
+        <a href="index.html" class="px-3 py-1.5 rounded-md" onmouseover="this.style.background='var(--sr-accent-subtle)'" onmouseout="this.style.background=''">Home</a>
+        <a href="privacy-policy.html" class="px-3 py-1.5 rounded-md" onmouseover="this.style.background='var(--sr-accent-subtle)'" onmouseout="this.style.background=''">Privacy</a>
+      </nav>
+      <div class="flex items-center gap-2">
+        <button id="themeToggle" aria-label="Toggle theme" class="h-8 px-3 rounded-full text-xs font-mono uppercase tracking-widest" style="border:1px solid var(--sr-border-strong);color:var(--sr-fg-secondary)">Dark</button>
+        <a href="install.html" class="h-8 px-4 rounded-full text-white text-sm font-semibold flex items-center" style="background:var(--sr-accent)">Install</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- PAGE HERO -->
+  <section class="mx-auto max-w-5xl px-5 pt-16 pb-10 text-center">
+    <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">Documentation · v0.8.0-beta</p>
+    <h1 class="text-4xl md:text-6xl font-bold leading-tight">SoundRoot — what &amp; how.</h1>
+    <p class="mt-4 max-w-2xl mx-auto text-lg" style="color:var(--sr-fg-secondary)">
+      A short, honest reference: what SoundRoot is, how it works under the hood, and what to type when something goes sideways.
+    </p>
+  </section>
+
+  <!-- LAYOUT: TOC + content -->
+  <div class="mx-auto max-w-5xl px-5 pb-24 grid lg:grid-cols-[220px_1fr] gap-10">
+
+    <!-- TOC -->
+    <aside class="docs-toc lg:sticky lg:top-20 self-start text-sm" style="color:var(--sr-fg-secondary)">
+      <p class="font-mono text-[10px] tracking-[.2em] uppercase mb-3" style="color:var(--sr-fg-muted)">On this page</p>
+      <nav class="flex flex-col gap-1">
+        <a class="px-3 py-1.5 rounded-md" href="#what">What is SoundRoot</a>
+        <a class="px-3 py-1.5 rounded-md" href="#how">How it works</a>
+        <a class="px-3 py-1.5 rounded-md" href="#concepts">Core concepts</a>
+        <a class="px-3 py-1.5 rounded-md" href="#workflow">User workflow</a>
+        <a class="px-3 py-1.5 rounded-md" href="#shortcuts">Keyboard shortcuts</a>
+        <a class="px-3 py-1.5 rounded-md" href="#config">Configuration file</a>
+        <a class="px-3 py-1.5 rounded-md" href="#requirements">Requirements</a>
+        <a class="px-3 py-1.5 rounded-md" href="#architecture">Architecture</a>
+        <a class="px-3 py-1.5 rounded-md" href="#troubleshooting">Troubleshooting</a>
+        <a class="px-3 py-1.5 rounded-md" href="#privacy">Privacy</a>
+        <a class="px-3 py-1.5 rounded-md" href="#contribute">Source &amp; contributing</a>
+      </nav>
+    </aside>
+
+    <!-- CONTENT -->
+    <main class="space-y-20">
+
+      <!-- WHAT -->
+      <section id="what" class="docs-section">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">01 · The idea</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-5">What is SoundRoot</h2>
+        <div class="rounded-2xl overflow-hidden mb-6" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+          <img src="assets/doc-what.svg" alt="Diagram showing SoundRoot as a panel widget that connects applications to output devices through named rooms" class="block w-full h-auto" />
+        </div>
+        <div class="space-y-4 text-base leading-relaxed" style="color:var(--sr-fg-secondary)">
+          <p>
+            <strong style="color:var(--sr-fg-primary)">SoundRoot</strong> is a KDE Plasma 6 panel widget (a <em>plasmoid</em>) for Linux desktops running <strong style="color:var(--sr-fg-primary)">PipeWire</strong>. It sits in the system tray and gives you one place to decide which application plays through which output device.
+          </p>
+          <p>
+            Instead of opening <code class="inline">pavucontrol</code> every time you switch headphones for speakers, you build named <strong style="color:var(--sr-fg-primary)">audio rooms</strong> — presets like <em>Gaming</em>, <em>Work</em> or <em>Stream</em> — and switch the entire routing setup with one click or a global keyboard shortcut.
+          </p>
+          <p>
+            It is open source under <strong style="color:var(--sr-fg-primary)">GPL-2.0-or-later</strong>, currently shipped as <strong style="color:var(--sr-fg-primary)">v0.8.0-beta</strong>, and runs entirely on your machine — no accounts, no telemetry, no cloud.
+          </p>
+        </div>
+
+        <div class="mt-6 grid sm:grid-cols-3 gap-3">
+          <div class="rounded-xl p-4" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <p class="font-mono text-[10px] tracking-widest uppercase" style="color:var(--sr-fg-muted)">Form</p>
+            <p class="font-semibold mt-1">Panel widget</p>
+            <p class="text-xs mt-1" style="color:var(--sr-fg-secondary)">Lives in the KDE system tray, popup UI on click.</p>
+          </div>
+          <div class="rounded-xl p-4" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <p class="font-mono text-[10px] tracking-widest uppercase" style="color:var(--sr-fg-muted)">Stack</p>
+            <p class="font-semibold mt-1">QML + C++</p>
+            <p class="text-xs mt-1" style="color:var(--sr-fg-secondary)">Qt 6, KDE Frameworks 6, libpulse async API.</p>
+          </div>
+          <div class="rounded-xl p-4" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <p class="font-mono text-[10px] tracking-widest uppercase" style="color:var(--sr-fg-muted)">Audience</p>
+            <p class="font-semibold mt-1">Power users</p>
+            <p class="text-xs mt-1" style="color:var(--sr-fg-secondary)">Gamers, streamers, podcasters, multi-device setups.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- HOW -->
+      <section id="how" class="docs-section">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-success)">02 · The flow</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-5">How it works</h2>
+        <div class="rounded-2xl overflow-hidden mb-6" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+          <img src="assets/doc-how.svg" alt="Four-step diagram: open from tray, create a room, wire apps to outputs, switch instantly" class="block w-full h-auto" />
+        </div>
+        <div class="space-y-4 text-base leading-relaxed" style="color:var(--sr-fg-secondary)">
+          <p>
+            SoundRoot does not invent a parallel audio system. It talks to PipeWire through the <code class="inline">libpulse</code> asynchronous API, listens for sink and stream changes, and builds a live picture of the apps and devices on your machine.
+          </p>
+          <p>
+            When you wire an application to an output, SoundRoot moves that stream to the corresponding sink. When you switch rooms, the widget walks through the room's saved routes and re-applies them in one batch. Configuration is persisted to a JSON file so your setup survives reboots.
+          </p>
+        </div>
+      </section>
+
+      <!-- CONCEPTS -->
+      <section id="concepts" class="docs-section">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">03 · Vocabulary</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-5">Core concepts</h2>
+        <dl class="space-y-4">
+          <div class="rounded-xl p-5" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <dt class="font-bold text-lg">Audio Room</dt>
+            <dd class="mt-1 text-sm" style="color:var(--sr-fg-secondary)">A named preset that owns a colour, an icon, and a list of routes. Switching a room replays its routing on top of whatever apps are running.</dd>
+          </div>
+          <div class="rounded-xl p-5" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <dt class="font-bold text-lg">Route</dt>
+            <dd class="mt-1 text-sm" style="color:var(--sr-fg-secondary)">A connection from a source application (a sink-input) to one output sink, with its own volume value (0&ndash;150 %).</dd>
+          </div>
+          <div class="rounded-xl p-5" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <dt class="font-bold text-lg">Sink &amp; Sink-Input</dt>
+            <dd class="mt-1 text-sm" style="color:var(--sr-fg-secondary)">PipeWire/PulseAudio terms. A <em>sink</em> is an output device, a <em>sink-input</em> is an audio stream produced by an application.</dd>
+          </div>
+          <div class="rounded-xl p-5" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <dt class="font-bold text-lg">Many-to-many routing</dt>
+            <dd class="mt-1 text-sm" style="color:var(--sr-fg-secondary)">One app can be wired to several outputs at once, and one output can receive multiple apps. The visual board uses colour-coded wires so you can read the topology at a glance.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- WORKFLOW -->
+      <section id="workflow" class="docs-section">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-success)">04 · Step by step</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-5">User workflow</h2>
+        <ol class="space-y-3 list-decimal list-inside text-base" style="color:var(--sr-fg-secondary)">
+          <li><strong style="color:var(--sr-fg-primary)">Open the widget</strong> from the system tray icon.</li>
+          <li><strong style="color:var(--sr-fg-primary)">Press <em>+ New Room</em></strong>, give it a name, colour and icon.</li>
+          <li><strong style="color:var(--sr-fg-primary)">Drag a wire</strong> from any running application to any output device.</li>
+          <li><strong style="color:var(--sr-fg-primary)">Adjust per-route volume</strong> independently of the system master.</li>
+          <li><strong style="color:var(--sr-fg-primary)">Activate the room</strong> with the toggle &mdash; the routing applies in one batch.</li>
+          <li><strong style="color:var(--sr-fg-primary)">Switch rooms</strong> later by clicking another room or using a global shortcut.</li>
+        </ol>
+      </section>
+
+      <!-- SHORTCUTS -->
+      <section id="shortcuts" class="docs-section">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">05 · Hands on the keys</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-5">Keyboard shortcuts</h2>
+        <p class="text-sm mb-4" style="color:var(--sr-fg-secondary)">
+          Shortcuts are registered through KDE GlobalAccel and can be changed under <em>System Settings &rarr; Shortcuts</em>, or directly in SoundRoot's settings dialog.
+        </p>
+        <div class="rounded-xl overflow-hidden" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+          <table class="w-full text-sm">
+            <thead>
+              <tr style="background:var(--sr-bg-elevated);color:var(--sr-fg-muted)">
+                <th class="text-left px-4 py-3 font-mono text-[11px] tracking-widest uppercase">Action</th>
+                <th class="text-left px-4 py-3 font-mono text-[11px] tracking-widest uppercase">Default</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-top:1px solid var(--sr-border-subtle)">
+                <td class="px-4 py-3">Activate widget (as if clicked)</td>
+                <td class="px-4 py-3"><span class="kbd">Ctrl</span> + <span class="kbd">Shift</span> + <span class="kbd">K</span></td>
+              </tr>
+              <tr style="border-top:1px solid var(--sr-border-subtle)">
+                <td class="px-4 py-3">Next room</td>
+                <td class="px-4 py-3"><span class="kbd">Ctrl</span> + <span class="kbd">Alt</span> + <span class="kbd">&rarr;</span></td>
+              </tr>
+              <tr style="border-top:1px solid var(--sr-border-subtle)">
+                <td class="px-4 py-3">Previous room</td>
+                <td class="px-4 py-3"><span class="kbd">Ctrl</span> + <span class="kbd">Alt</span> + <span class="kbd">&larr;</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- CONFIG -->
+      <section id="config" class="docs-section">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-success)">06 · Where things live</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-5">Configuration file</h2>
+        <p class="text-base mb-4" style="color:var(--sr-fg-secondary)">
+          All rooms, routes and per-route volumes are stored in a single JSON file in your home directory. You can back it up, version it or copy it between machines.
+        </p>
+        <pre class="code-block"><span class="c"># Path</span>
+~/.config/audiorouter/groups.json
+
+<span class="c"># Rough shape</span>
+{
+  <span class="k">"groups"</span>: [
+    {
+      <span class="k">"name"</span>: <span class="s">"Gaming"</span>,
+      <span class="k">"color"</span>: <span class="s">"#4a90e2"</span>,
+      <span class="k">"icon"</span>: <span class="s">"audio-headphones"</span>,
+      <span class="k">"routes"</span>: [
+        { <span class="k">"app"</span>: <span class="s">"firefox"</span>,  <span class="k">"sink"</span>: <span class="s">"alsa_output.headphones"</span>, <span class="k">"volume"</span>: 0.85 },
+        { <span class="k">"app"</span>: <span class="s">"discord"</span>,  <span class="k">"sink"</span>: <span class="s">"alsa_output.speakers"</span>,   <span class="k">"volume"</span>: 0.60 }
+      ]
+    }
+  ]
+}</pre>
+        <p class="text-xs mt-3" style="color:var(--sr-fg-muted)">
+          The exact field set may evolve between beta releases. Treat the file as authoritative for your local install, not as a stable public API yet.
+        </p>
+      </section>
+
+      <!-- REQUIREMENTS -->
+      <section id="requirements" class="docs-section">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">07 · What you need</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-5">Requirements</h2>
+        <ul class="grid sm:grid-cols-2 gap-3 text-sm">
+          <li class="rounded-xl p-4" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)"><strong style="color:var(--sr-fg-primary)">Linux</strong> with KDE Plasma 6</li>
+          <li class="rounded-xl p-4" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)"><strong style="color:var(--sr-fg-primary)">PipeWire</strong> with the PulseAudio compatibility layer (<code class="inline">pipewire-pulse</code>)</li>
+          <li class="rounded-xl p-4" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)"><strong style="color:var(--sr-fg-primary)">Qt 6</strong>, KDE Frameworks 6, <code class="inline">libpulse</code></li>
+          <li class="rounded-xl p-4" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)"><strong style="color:var(--sr-fg-primary)">CMake 3.20+</strong> and <strong>Extra CMake Modules</strong> (only for building from source)</li>
+        </ul>
+      </section>
+
+      <!-- ARCHITECTURE -->
+      <section id="architecture" class="docs-section">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-success)">08 · Under the hood</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-5">Architecture in four layers</h2>
+        <div class="space-y-3">
+          <div class="rounded-xl p-5 flex items-start gap-4" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0" style="background:var(--sr-accent-subtle);color:var(--sr-accent)">UI</div>
+            <div>
+              <p class="font-semibold">QML interface</p>
+              <p class="text-sm" style="color:var(--sr-fg-secondary)">Plasmoid contents, popup, routing board, room list, settings dialog. Pure declarative UI bound to backend models.</p>
+            </div>
+          </div>
+          <div class="rounded-xl p-5 flex items-start gap-4" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0" style="background:var(--sr-accent-subtle);color:var(--sr-accent)">M</div>
+            <div>
+              <p class="font-semibold">Models &mdash; <code class="inline">QAbstractListModel</code></p>
+              <p class="text-sm" style="color:var(--sr-fg-secondary)"><code class="inline">GroupListModel</code>, <code class="inline">RouteListModel</code>, <code class="inline">SinkInputModel</code>, <code class="inline">SinkModel</code> &mdash; reactive lists consumed by QML.</p>
+            </div>
+          </div>
+          <div class="rounded-xl p-5 flex items-start gap-4" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0" style="background:var(--sr-accent-subtle);color:var(--sr-accent)">B</div>
+            <div>
+              <p class="font-semibold">C++ backend &mdash; <code class="inline">AudioBackend</code></p>
+              <p class="text-sm" style="color:var(--sr-fg-secondary)">State, persistence to <code class="inline">groups.json</code>, route application, integration with KDE GlobalAccel for shortcuts.</p>
+            </div>
+          </div>
+          <div class="rounded-xl p-5 flex items-start gap-4" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0" style="background:var(--sr-accent-subtle);color:var(--sr-success)">A</div>
+            <div>
+              <p class="font-semibold">Audio API &mdash; <code class="inline">libpulse</code> async</p>
+              <p class="text-sm" style="color:var(--sr-fg-secondary)">Talks to PipeWire through the PulseAudio compatibility layer. Asynchronous so the UI never blocks while sinks and streams change.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TROUBLESHOOTING -->
+      <section id="troubleshooting" class="docs-section">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">09 · When it misbehaves</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-5">Troubleshooting</h2>
+        <div class="space-y-4">
+          <details class="rounded-xl p-5" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <summary class="font-semibold cursor-pointer">The widget appears but the device list is empty</summary>
+            <p class="mt-2 text-sm" style="color:var(--sr-fg-secondary)">Check that <code class="inline">pipewire-pulse</code> is running. SoundRoot relies on the PulseAudio compatibility layer, so a pure ALSA-only setup will not be detected. Try <code class="inline">systemctl --user status pipewire-pulse.service</code>.</p>
+          </details>
+          <details class="rounded-xl p-5" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <summary class="font-semibold cursor-pointer">Switching a room does nothing</summary>
+            <p class="mt-2 text-sm" style="color:var(--sr-fg-secondary)">Make sure the application is actually playing audio &mdash; SoundRoot routes <em>active</em> sink-inputs. Apps that only open the audio device on demand (some games, browsers without an active tab) will not appear until they emit sound.</p>
+          </details>
+          <details class="rounded-xl p-5" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <summary class="font-semibold cursor-pointer">My shortcuts do not fire</summary>
+            <p class="mt-2 text-sm" style="color:var(--sr-fg-secondary)">Open the SoundRoot settings dialog and re-record the shortcut, or check for conflicts under <em>System Settings &rarr; Shortcuts &rarr; Custom Shortcuts</em>. KDE GlobalAccel will refuse silently if another app already owns the key combination.</p>
+          </details>
+          <details class="rounded-xl p-5" style="border:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)">
+            <summary class="font-semibold cursor-pointer">I want to start over</summary>
+            <p class="mt-2 text-sm" style="color:var(--sr-fg-secondary)">Quit Plasma's widget instance, delete <code class="inline">~/.config/audiorouter/groups.json</code>, then re-add the plasmoid. You will land on a clean state.</p>
+          </details>
+        </div>
+      </section>
+
+      <!-- PRIVACY -->
+      <section id="privacy" class="docs-section">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-success)">10 · Boundaries</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-5">Privacy &amp; permissions</h2>
+        <ul class="space-y-2 text-sm" style="color:var(--sr-fg-secondary)">
+          <li>&bull; SoundRoot runs locally; no network calls, no analytics, no accounts.</li>
+          <li>&bull; It only reads the audio session graph and writes to <code class="inline">~/.config/audiorouter/groups.json</code>.</li>
+          <li>&bull; It does not capture, record or upload any audio.</li>
+        </ul>
+        <p class="mt-3 text-sm">See the full <a class="underline" style="color:var(--sr-accent)" href="privacy-policy.html">privacy policy</a>.</p>
+      </section>
+
+      <!-- CONTRIBUTE -->
+      <section id="contribute" class="docs-section">
+        <p class="font-mono text-[11px] tracking-[.2em] uppercase mb-2" style="color:var(--sr-accent)">11 · Get involved</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-5">Source &amp; contributing</h2>
+        <p class="text-base mb-4" style="color:var(--sr-fg-secondary)">
+          SoundRoot is open source under <strong style="color:var(--sr-fg-primary)">GPL-2.0-or-later</strong>. Issues, ideas and pull requests are welcome &mdash; especially for the items still on the <em>Nice to Have</em> list (auto-switch on device hotplug, virtual-device creation from the UI, smoother onboarding).
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <a href="https://github.com/DeadlineDoggo/audiorouter" target="_blank" rel="noopener" class="rounded-full px-5 py-2 text-sm font-semibold flex items-center gap-2" style="border:1px solid var(--sr-border-strong);background:var(--sr-bg-surface)">
+            GitHub repository
+          </a>
+          <a href="https://store.kde.org/p/2357238/" target="_blank" rel="noopener" class="rounded-full px-5 py-2 text-sm font-semibold flex items-center gap-2" style="border:1px solid var(--sr-border-strong);background:var(--sr-bg-surface)">
+            KDE Store page
+          </a>
+          <a href="install.html" class="rounded-full text-white px-5 py-2 text-sm font-semibold" style="background:var(--sr-accent)">Install guide</a>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- FOOTER -->
+  <footer style="border-top:1px solid var(--sr-border-subtle);background:var(--sr-bg-surface)" class="py-10">
+    <div class="mx-auto max-w-5xl px-5 flex flex-col md:flex-row items-center justify-between gap-4 text-xs" style="color:var(--sr-fg-muted)">
+      <span>SoundRoot &middot; v0.8.0-beta &middot; GPL-2.0-or-later</span>
+      <nav class="flex flex-wrap gap-4">
+        <a href="index.html" class="hover:underline">Home</a>
+        <a href="features.html" class="hover:underline">Features</a>
+        <a href="install.html" class="hover:underline">Install</a>
+        <a href="docs.html" class="hover:underline">Docs</a>
+        <a href="privacy-policy.html" class="hover:underline">Privacy</a>
+        <a href="terms-of-use.html" class="hover:underline">Terms</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="nav.js"></script>
+</body>
+</html>

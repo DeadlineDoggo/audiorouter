@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" fill="none" role="img" aria-label="SoundRoot concept overview">
+  <defs>
+    <linearGradient id="dwBg" x1="0" y1="0" x2="960" y2="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0e1f1a"/>
+      <stop offset="100%" stop-color="#0a1714"/>
+    </linearGradient>
+    <linearGradient id="dwWireBlue" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4a90e2" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#4a90e2" stop-opacity="0.30"/>
+    </linearGradient>
+    <linearGradient id="dwWireGreen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#50c878" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#50c878" stop-opacity="0.30"/>
+    </linearGradient>
+    <linearGradient id="dwWireOrange" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e27450" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#e27450" stop-opacity="0.30"/>
+    </linearGradient>
+    <radialGradient id="dwGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#4a90e2" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#4a90e2" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="960" height="560" fill="url(#dwBg)"/>
+  <ellipse cx="480" cy="280" rx="380" ry="220" fill="url(#dwGlow)"/>
+  <g opacity="0.05">
+    <pattern id="dwDots" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="16" cy="16" r="0.8" fill="#fff"/>
+    </pattern>
+    <rect width="960" height="560" fill="url(#dwDots)"/>
+  </g>
+
+  <!-- Title strip -->
+  <text x="40" y="48" font-family="'IBM Plex Mono', monospace" font-size="11" fill="#4a90e2" letter-spacing="3">WHAT IS SOUNDROOT</text>
+  <text x="40" y="80" font-family="'Space Grotesk', sans-serif" font-size="22" font-weight="700" fill="#e2ede9">A panel widget that turns scattered audio into named rooms.</text>
+
+  <!-- LEFT: applications column -->
+  <text x="80" y="138" font-family="'IBM Plex Mono', monospace" font-size="10" fill="#5c7a71" letter-spacing="2">APPLICATIONS</text>
+  <g font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="600" fill="#e0ebe7">
+    <g>
+      <rect x="60" y="156" width="200" height="56" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+      <circle cx="86" cy="184" r="11" fill="#4a90e2" opacity="0.18"/>
+      <text x="110" y="189">Firefox</text>
+      <text x="110" y="204" font-size="10" font-weight="400" fill="#5c7a71">YouTube · stream</text>
+      <circle cx="246" cy="184" r="6" fill="#4a90e2"/>
+    </g>
+    <g>
+      <rect x="60" y="226" width="200" height="56" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+      <circle cx="86" cy="254" r="11" fill="#50c878" opacity="0.18"/>
+      <text x="110" y="259">Discord</text>
+      <text x="110" y="274" font-size="10" font-weight="400" fill="#5c7a71">voice chat</text>
+      <circle cx="246" cy="254" r="6" fill="#50c878"/>
+    </g>
+    <g>
+      <rect x="60" y="296" width="200" height="56" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+      <circle cx="86" cy="324" r="11" fill="#e27450" opacity="0.18"/>
+      <text x="110" y="329">CS2</text>
+      <text x="110" y="344" font-size="10" font-weight="400" fill="#5c7a71">game audio</text>
+      <circle cx="246" cy="324" r="6" fill="#e27450"/>
+    </g>
+    <g>
+      <rect x="60" y="366" width="200" height="56" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+      <circle cx="86" cy="394" r="11" fill="#4a90e2" opacity="0.18"/>
+      <text x="110" y="399">Spotify</text>
+      <text x="110" y="414" font-size="10" font-weight="400" fill="#5c7a71">music</text>
+      <circle cx="246" cy="394" r="6" fill="#4a90e2"/>
+    </g>
+  </g>
+
+  <!-- CENTER: SoundRoot widget hub -->
+  <g>
+    <rect x="350" y="140" width="260" height="320" rx="20" fill="#111f1b" stroke="#4a90e2" stroke-opacity="0.4"/>
+    <rect x="350" y="140" width="260" height="44" rx="20" fill="#0a1714"/>
+    <circle cx="372" cy="162" r="6" fill="#4a90e2"/>
+    <text x="386" y="167" font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="700" fill="#e2ede9">SoundRoot</text>
+    <text x="540" y="167" font-family="'IBM Plex Mono', monospace" font-size="10" fill="#5c7a71">tray</text>
+
+    <text x="370" y="208" font-family="'IBM Plex Mono', monospace" font-size="10" fill="#5c7a71" letter-spacing="2">ROOMS</text>
+
+    <!-- room: Gaming (active) -->
+    <rect x="366" y="222" width="228" height="56" rx="12" fill="#4a90e2" fill-opacity="0.12" stroke="#4a90e2" stroke-opacity="0.5"/>
+    <rect x="366" y="222" width="3" height="56" rx="1.5" fill="#4a90e2"/>
+    <circle cx="392" cy="250" r="10" fill="#4a90e2" fill-opacity="0.25"/>
+    <circle cx="392" cy="250" r="5" fill="#4a90e2"/>
+    <text x="412" y="247" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="700" fill="#e2ede9">Gaming</text>
+    <text x="412" y="263" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#9ab5ad">3 routes · active</text>
+
+    <!-- room: Work -->
+    <rect x="366" y="288" width="228" height="48" rx="12" fill="#0a1714"/>
+    <circle cx="392" cy="312" r="5" fill="#50c878"/>
+    <text x="412" y="316" font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="600" fill="#9ab5ad">Work</text>
+
+    <!-- room: Music -->
+    <rect x="366" y="346" width="228" height="48" rx="12" fill="#0a1714"/>
+    <circle cx="392" cy="370" r="5" fill="#e27450"/>
+    <text x="412" y="374" font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="600" fill="#9ab5ad">Music</text>
+
+    <!-- room: Stream -->
+    <rect x="366" y="404" width="228" height="40" rx="12" fill="transparent" stroke="#1e3c34" stroke-dasharray="3 3"/>
+    <text x="380" y="429" font-family="'Space Grotesk', sans-serif" font-size="12" fill="#5c7a71">+ New Room</text>
+  </g>
+
+  <!-- RIGHT: output devices -->
+  <text x="700" y="138" font-family="'IBM Plex Mono', monospace" font-size="10" fill="#5c7a71" letter-spacing="2">OUTPUTS</text>
+  <g font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="600" fill="#e0ebe7">
+    <g>
+      <rect x="700" y="156" width="200" height="64" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+      <circle cx="722" cy="188" r="6" fill="#4a90e2"/>
+      <text x="744" y="184">Headphones</text>
+      <text x="744" y="200" font-size="10" font-weight="400" fill="#5c7a71">HyperX Cloud II</text>
+    </g>
+    <g>
+      <rect x="700" y="234" width="200" height="64" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+      <circle cx="722" cy="266" r="6" fill="#50c878"/>
+      <text x="744" y="262">Speakers</text>
+      <text x="744" y="278" font-size="10" font-weight="400" fill="#5c7a71">Built-in stereo</text>
+    </g>
+    <g>
+      <rect x="700" y="312" width="200" height="64" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+      <circle cx="722" cy="344" r="6" fill="#e27450"/>
+      <text x="744" y="340">Monitor HDMI</text>
+      <text x="744" y="356" font-size="10" font-weight="400" fill="#5c7a71">GA107 Audio</text>
+    </g>
+    <g>
+      <rect x="700" y="390" width="200" height="64" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+      <circle cx="722" cy="422" r="6" fill="#4a90e2"/>
+      <text x="744" y="418">USB DAC</text>
+      <text x="744" y="434" font-size="10" font-weight="400" fill="#5c7a71">Optional</text>
+    </g>
+  </g>
+
+  <!-- Wires: apps -> hub -->
+  <path d="M252 184 C300 184 320 244 366 250" stroke="url(#dwWireBlue)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M252 254 C300 254 320 252 366 252" stroke="url(#dwWireGreen)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M252 324 C300 324 320 256 366 254" stroke="url(#dwWireOrange)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M252 394 C300 394 320 260 366 258" stroke="url(#dwWireBlue)" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.4"/>
+
+  <!-- Wires: hub -> outputs -->
+  <path d="M594 250 C640 250 660 188 700 188" stroke="url(#dwWireBlue)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M594 252 C640 252 660 266 700 266" stroke="url(#dwWireGreen)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M594 254 C640 254 660 344 700 344" stroke="url(#dwWireOrange)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Footer caption -->
+  <g>
+    <line x1="40" y1="496" x2="920" y2="496" stroke="#1e3c34" stroke-opacity="0.6"/>
+    <text x="40" y="524" font-family="'Space Grotesk', sans-serif" font-size="13" fill="#9ab5ad">
+      Each <tspan fill="#4a90e2" font-weight="700">room</tspan> remembers which apps go where —
+      <tspan fill="#50c878" font-weight="700">switch one</tspan> and the whole audio setup follows.
+    </text>
+    <text x="40" y="544" font-family="'IBM Plex Mono', monospace" font-size="10" fill="#5c7a71">KDE Plasma 6 · PipeWire · Wayland</text>
+  </g>
+</svg>
