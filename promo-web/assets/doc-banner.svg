@@ -1,0 +1,235 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 600" fill="none" role="img" aria-label="SoundRoot — route any app to any device">
+  <defs>
+    <linearGradient id="bnBg" x1="0" y1="0" x2="1800" y2="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0a1714"/>
+      <stop offset="60%" stop-color="#0e1f1a"/>
+      <stop offset="100%" stop-color="#0a1714"/>
+    </linearGradient>
+    <linearGradient id="bnBlue" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4a90e2" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#4a90e2" stop-opacity="0.25"/>
+    </linearGradient>
+    <linearGradient id="bnGreen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#50c878" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#50c878" stop-opacity="0.25"/>
+    </linearGradient>
+    <linearGradient id="bnOrange" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e27450" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#e27450" stop-opacity="0.25"/>
+    </linearGradient>
+    <linearGradient id="bnPurple" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#c850c8" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#c850c8" stop-opacity="0.25"/>
+    </linearGradient>
+    <radialGradient id="bnGlow1" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#4a90e2" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#4a90e2" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bnGlow2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#50c878" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#50c878" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1800" height="600" fill="url(#bnBg)"/>
+  <ellipse cx="600" cy="300" rx="500" ry="320" fill="url(#bnGlow1)"/>
+  <ellipse cx="1300" cy="300" rx="420" ry="260" fill="url(#bnGlow2)"/>
+  <g opacity="0.045">
+    <pattern id="bnDots" width="36" height="36" patternUnits="userSpaceOnUse">
+      <circle cx="18" cy="18" r="0.9" fill="#fff"/>
+    </pattern>
+    <rect width="1800" height="600" fill="url(#bnDots)"/>
+  </g>
+
+  <!-- ── LEFT: Brand copy ── -->
+  <text x="64" y="92" font-family="'IBM Plex Mono', monospace" font-size="12" fill="#4a90e2" letter-spacing="3">KDE PLASMA 6 · PIPEWIRE · v0.8.0-beta</text>
+  <text x="64" y="168" font-family="'Space Grotesk', sans-serif" font-size="64" font-weight="700" fill="#e2ede9" letter-spacing="-1">SoundRoot</text>
+  <text x="64" y="216" font-family="'Space Grotesk', sans-serif" font-size="22" font-weight="400" fill="#9ab5ad">Route any app to any device.</text>
+  <text x="64" y="244" font-family="'Space Grotesk', sans-serif" font-size="22" font-weight="400" fill="#9ab5ad">Build audio rooms. Switch with a shortcut.</text>
+
+  <!-- Bullet pills -->
+  <g font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="600">
+    <rect x="64" y="280" width="156" height="30" rx="15" fill="#4a90e2" fill-opacity="0.13" stroke="#4a90e2" stroke-opacity="0.4"/>
+    <circle cx="84" cy="295" r="4" fill="#4a90e2"/>
+    <text x="96" y="300" fill="#9ab5ad">Many-to-many</text>
+
+    <rect x="234" y="280" width="140" height="30" rx="15" fill="#50c878" fill-opacity="0.11" stroke="#50c878" stroke-opacity="0.35"/>
+    <circle cx="254" cy="295" r="4" fill="#50c878"/>
+    <text x="266" y="300" fill="#9ab5ad">Per-route vol</text>
+
+    <rect x="388" y="280" width="150" height="30" rx="15" fill="#4a90e2" fill-opacity="0.10" stroke="#4a90e2" stroke-opacity="0.3"/>
+    <circle cx="408" cy="295" r="4" fill="#4a90e2"/>
+    <text x="420" y="300" fill="#9ab5ad">Global shortcuts</text>
+
+    <rect x="64" y="324" width="128" height="30" rx="15" fill="#50c878" fill-opacity="0.10" stroke="#50c878" stroke-opacity="0.3"/>
+    <circle cx="84" cy="339" r="4" fill="#50c878"/>
+    <text x="96" y="344" fill="#9ab5ad">Audio rooms</text>
+
+    <rect x="206" y="324" width="168" height="30" rx="15" fill="#4a90e2" fill-opacity="0.10" stroke="#4a90e2" stroke-opacity="0.3"/>
+    <circle cx="226" cy="339" r="4" fill="#4a90e2"/>
+    <text x="238" y="344" fill="#9ab5ad">Open source · GPL</text>
+
+    <rect x="388" y="324" width="152" height="30" rx="15" fill="#50c878" fill-opacity="0.10" stroke="#50c878" stroke-opacity="0.3"/>
+    <circle cx="408" cy="339" r="4" fill="#50c878"/>
+    <text x="420" y="344" fill="#9ab5ad">No telemetry</text>
+  </g>
+
+  <!-- Divider line -->
+  <line x1="580" y1="60" x2="580" y2="540" stroke="#1e3c34" stroke-opacity="0.7"/>
+
+  <!-- ── CENTER: Apps column ── -->
+  <text x="636" y="88" font-family="'IBM Plex Mono', monospace" font-size="11" fill="#5c7a71" letter-spacing="2">APPLICATIONS</text>
+
+  <g font-family="'Space Grotesk', sans-serif">
+    <!-- Firefox -->
+    <rect x="624" y="104" width="200" height="62" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+    <circle cx="648" cy="135" r="11" fill="#4a90e2" fill-opacity="0.2"/>
+    <circle cx="648" cy="135" r="5" fill="#4a90e2"/>
+    <text x="670" y="131" font-size="13" font-weight="600" fill="#e0ebe7">Firefox</text>
+    <text x="670" y="148" font-size="10" font-weight="400" fill="#5c7a71">YouTube · playback</text>
+    <circle cx="810" cy="135" r="5.5" fill="#4a90e2"/>
+
+    <!-- Discord -->
+    <rect x="624" y="180" width="200" height="62" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+    <circle cx="648" cy="211" r="11" fill="#50c878" fill-opacity="0.2"/>
+    <circle cx="648" cy="211" r="5" fill="#50c878"/>
+    <text x="670" y="207" font-size="13" font-weight="600" fill="#e0ebe7">Discord</text>
+    <text x="670" y="224" font-size="10" font-weight="400" fill="#5c7a71">voice chat</text>
+    <circle cx="810" cy="211" r="5.5" fill="#50c878"/>
+
+    <!-- CS2 -->
+    <rect x="624" y="256" width="200" height="62" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+    <circle cx="648" cy="287" r="11" fill="#e27450" fill-opacity="0.2"/>
+    <circle cx="648" cy="287" r="5" fill="#e27450"/>
+    <text x="670" y="283" font-size="13" font-weight="600" fill="#e0ebe7">CS2</text>
+    <text x="670" y="300" font-size="10" font-weight="400" fill="#5c7a71">game audio</text>
+    <circle cx="810" cy="287" r="5.5" fill="#e27450"/>
+
+    <!-- Spotify -->
+    <rect x="624" y="332" width="200" height="62" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+    <circle cx="648" cy="363" r="11" fill="#c850c8" fill-opacity="0.2"/>
+    <circle cx="648" cy="363" r="5" fill="#c850c8"/>
+    <text x="670" y="359" font-size="13" font-weight="600" fill="#e0ebe7">Spotify</text>
+    <text x="670" y="376" font-size="10" font-weight="400" fill="#5c7a71">music</text>
+    <circle cx="810" cy="363" r="5.5" fill="#c850c8"/>
+
+    <!-- OBS -->
+    <rect x="624" y="408" width="200" height="62" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+    <circle cx="648" cy="439" r="11" fill="#4a90e2" fill-opacity="0.2"/>
+    <circle cx="648" cy="439" r="5" fill="#4a90e2"/>
+    <text x="670" y="435" font-size="13" font-weight="600" fill="#e0ebe7">OBS Studio</text>
+    <text x="670" y="452" font-size="10" font-weight="400" fill="#5c7a71">stream capture</text>
+    <circle cx="810" cy="439" r="5.5" fill="#4a90e2" opacity="0.5"/>
+  </g>
+
+  <!-- ── CENTER HUB: SoundRoot widget ── -->
+  <rect x="870" y="80" width="240" height="440" rx="18" fill="#111f1b" stroke="#4a90e2" stroke-opacity="0.45" stroke-width="1.5"/>
+  <!-- Title bar -->
+  <rect x="870" y="80" width="240" height="44" rx="18" fill="#0a1714"/>
+  <rect x="870" y="102" width="240" height="22" fill="#0a1714"/>
+  <circle cx="892" cy="102" r="6" fill="#4a90e2"/>
+  <text x="908" y="107" font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="700" fill="#e2ede9">SoundRoot</text>
+  <text x="1074" y="107" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#5c7a71">tray</text>
+
+  <text x="886" y="150" font-family="'IBM Plex Mono', monospace" font-size="10" fill="#5c7a71" letter-spacing="2">ROOMS</text>
+
+  <!-- Gaming (active) -->
+  <rect x="882" y="162" width="216" height="58" rx="11" fill="#4a90e2" fill-opacity="0.13" stroke="#4a90e2" stroke-opacity="0.5"/>
+  <rect x="882" y="162" width="4" height="58" rx="2" fill="#4a90e2"/>
+  <circle cx="906" cy="191" r="9" fill="#4a90e2" fill-opacity="0.25"/>
+  <circle cx="906" cy="191" r="4.5" fill="#4a90e2"/>
+  <text x="924" y="187" font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="700" fill="#e2ede9">Gaming</text>
+  <text x="924" y="203" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#9ab5ad">active · 4 routes</text>
+
+  <!-- Work -->
+  <rect x="882" y="230" width="216" height="52" rx="11" fill="#0a1714"/>
+  <circle cx="906" cy="256" r="4.5" fill="#50c878"/>
+  <text x="924" y="261" font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="600" fill="#9ab5ad">Work</text>
+
+  <!-- Podcast -->
+  <rect x="882" y="292" width="216" height="52" rx="11" fill="#0a1714"/>
+  <circle cx="906" cy="318" r="4.5" fill="#e27450"/>
+  <text x="924" y="323" font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="600" fill="#9ab5ad">Podcast</text>
+
+  <!-- Music -->
+  <rect x="882" y="354" width="216" height="52" rx="11" fill="#0a1714"/>
+  <circle cx="906" cy="380" r="4.5" fill="#c850c8"/>
+  <text x="924" y="385" font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="600" fill="#9ab5ad">Music</text>
+
+  <!-- New Room -->
+  <rect x="882" y="420" width="216" height="44" rx="11" fill="transparent" stroke="#1e3c34" stroke-dasharray="4 3"/>
+  <text x="990" y="447" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="12" fill="#5c7a71">+ New Room</text>
+
+  <!-- Shortcut chip -->
+  <rect x="882" y="476" width="216" height="28" rx="14" fill="#0a1714" stroke="#1e3c34"/>
+  <text x="990" y="495" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="10" fill="#50c878">Ctrl+Alt+→  next room</text>
+
+  <!-- ── RIGHT: Outputs column ── -->
+  <text x="1186" y="88" font-family="'IBM Plex Mono', monospace" font-size="11" fill="#5c7a71" letter-spacing="2">OUTPUT DEVICES</text>
+
+  <g font-family="'Space Grotesk', sans-serif">
+    <!-- Headphones -->
+    <rect x="1174" y="104" width="220" height="68" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+    <circle cx="1196" cy="138" r="6" fill="#4a90e2"/>
+    <text x="1216" y="134" font-size="13" font-weight="600" fill="#e0ebe7">Headphones</text>
+    <text x="1216" y="151" font-size="10" font-weight="400" fill="#5c7a71">HyperX Cloud II</text>
+
+    <!-- Speakers -->
+    <rect x="1174" y="186" width="220" height="68" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+    <circle cx="1196" cy="220" r="6" fill="#50c878"/>
+    <text x="1216" y="216" font-size="13" font-weight="600" fill="#e0ebe7">Speakers</text>
+    <text x="1216" y="233" font-size="10" font-weight="400" fill="#5c7a71">Built-in stereo</text>
+
+    <!-- Monitor HDMI -->
+    <rect x="1174" y="268" width="220" height="68" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+    <circle cx="1196" cy="302" r="6" fill="#e27450"/>
+    <text x="1216" y="298" font-size="13" font-weight="600" fill="#e0ebe7">Monitor HDMI</text>
+    <text x="1216" y="315" font-size="10" font-weight="400" fill="#5c7a71">GA107 Digital</text>
+
+    <!-- USB DAC -->
+    <rect x="1174" y="350" width="220" height="68" rx="12" fill="#111f1b" stroke="#1e3c34"/>
+    <circle cx="1196" cy="384" r="6" fill="#c850c8"/>
+    <text x="1216" y="380" font-size="13" font-weight="600" fill="#e0ebe7">USB DAC</text>
+    <text x="1216" y="397" font-size="10" font-weight="400" fill="#5c7a71">Optional</text>
+
+    <!-- Virtual Null -->
+    <rect x="1174" y="432" width="220" height="50" rx="12" fill="transparent" stroke="#1e3c34" stroke-dasharray="4 3"/>
+    <circle cx="1196" cy="457" r="4" fill="#4a90e2" opacity="0.4"/>
+    <text x="1216" y="461" font-size="12" font-weight="400" fill="#5c7a71">Virtual / Null Sink</text>
+  </g>
+
+  <!-- ── WIRES: apps → hub ── -->
+  <path d="M816 135 C844 135 856 191 882 191" stroke="url(#bnBlue)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M816 211 C844 211 860 193 882 193" stroke="url(#bnGreen)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M816 287 C844 287 860 195 882 195" stroke="url(#bnOrange)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M816 363 C844 363 862 197 882 197" stroke="url(#bnPurple)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M816 439 C844 439 864 195 882 195" stroke="url(#bnBlue)" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.35"/>
+
+  <!-- ── WIRES: hub → outputs ── -->
+  <path d="M1110 191 C1138 191 1152 138 1174 138" stroke="url(#bnBlue)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M1110 193 C1138 193 1152 220 1174 220" stroke="url(#bnGreen)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M1110 195 C1138 195 1152 302 1174 302" stroke="url(#bnOrange)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M1110 197 C1138 197 1152 384 1174 384" stroke="url(#bnPurple)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Volume badge on blue wire -->
+  <g transform="translate(1044,170)">
+    <rect x="-22" y="-10" width="44" height="20" rx="10" fill="#0a1714" stroke="#1e3c34"/>
+    <text x="0" y="4" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#4a90e2">85%</text>
+  </g>
+  <g transform="translate(1044,220)">
+    <rect x="-22" y="-10" width="44" height="20" rx="10" fill="#0a1714" stroke="#1e3c34"/>
+    <text x="0" y="4" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#50c878">60%</text>
+  </g>
+
+  <!-- ── BOTTOM RIGHT: tagline + status ── -->
+  <text x="1174" y="530" font-family="'Space Grotesk', sans-serif" font-size="15" font-weight="600" fill="#e2ede9">github.com/DeadlineDoggo/audiorouter</text>
+  <circle cx="1174" cy="558" r="5" fill="#50c878"/>
+  <text x="1190" y="563" font-family="'IBM Plex Mono', monospace" font-size="11" fill="#5c7a71">PipeWire · Qt 6 · KDE Plasma 6 · GPL-2.0+</text>
+
+  <!-- Bottom bar -->
+  <rect x="0" y="562" width="1800" height="38" fill="#0a1714"/>
+  <rect x="0" y="562" width="1800" height="1" fill="#1e3c34" opacity="0.5"/>
+  <text x="64" y="586" font-family="'IBM Plex Mono', monospace" font-size="11" fill="#5c7a71">SoundRoot v0.8.0-beta · No telemetry · No cloud · Open source</text>
+  <text x="1736" y="586" text-anchor="end" font-family="'IBM Plex Mono', monospace" font-size="11" fill="#4a90e2">store.kde.org/p/2357238</text>
+</svg>
