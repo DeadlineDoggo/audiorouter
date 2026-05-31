@@ -1,6 +1,6 @@
 {
     "KPlugin": {
-        "Id": "com.github.deadlinedoggo.audiorouter",
+        "Id": "org.kde.plasma.soundroot",
         "Name": "SoundRoot",
         "Description": "Route application audio streams to different output devices with grouped presets",
         "Icon": "audio-volume-high",
@@ -12,7 +12,7 @@
         ],
         "Category": "Multimedia",
         "License": "GPL-2.0-or-later",
-        "Version": "0.8.0-beta",
+        "Version": "0.8.1-beta",
         "Website": "https://store.kde.org"
     },
     "KPackageStructure": "Plasma/Applet",
