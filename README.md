@@ -38,8 +38,10 @@ Install directly from the [KDE Store](https://store.kde.org/p/2357238/) via Plas
 Download the latest `.plasmoid` file from [Releases](https://github.com/deadlinedoggo/soundroot/releases), then:
 
 ```bash
-kpackagetool6 -i soundroot-*.plasmoid
+kpackagetool6 --type Plasma/Applet -i soundroot-*.plasmoid
 ```
+
+> **Note:** The `.plasmoid` file only installs the QML package. The C++ backend (PipeWire/PulseAudio integration) requires building from source — see below.
 
 ### Build from Source
 
