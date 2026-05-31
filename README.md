@@ -35,24 +35,39 @@ Install directly from the [KDE Store](https://store.kde.org/p/2357238/) via Plas
 
 ### GitHub Releases
 
-Download the latest `.plasmoid` file from [Releases](https://github.com/deadlinedoggo/soundroot/releases), then:
+Download `soundroot-*.tar.gz` from [Releases](https://github.com/DeadlineDoggo/audiorouter/releases), extract, and run:
 
 ```bash
-kpackagetool6 --type Plasma/Applet -i soundroot-*.plasmoid
+tar -xzf soundroot-*.tar.gz
+cd soundroot-*
+bash install-local.sh
 ```
 
-> **Note:** The `.plasmoid` file only installs the QML package. The C++ backend (PipeWire/PulseAudio integration) requires building from source — see below.
+Then restart Plasma and add the widget:
+
+```bash
+kquitapp6 plasmashell && kstart6 plasmashell
+```
+
+Right-click your panel → **Add Widgets** → search **SoundRoot** → drag to panel.
+
+> **Note:** The `.plasmoid` file (also available in Releases) only installs the QML layer — audio routing will not work without the C++ backend. Use the `.tar.gz` + `install-local.sh` path for full functionality.
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/deadlinedoggo/soundroot.git
-cd soundroot
-mkdir build && cd build
-cmake .. -DCMAKE_INSTALL_PREFIX=$(kf6-config --prefix)
-make
-sudo make install
+git clone https://github.com/DeadlineDoggo/audiorouter.git
+cd audiorouter
+bash install-local.sh
 ```
+
+Then restart Plasma and add the widget:
+
+```bash
+kquitapp6 plasmashell && kstart6 plasmashell
+```
+
+Right-click your panel → **Add Widgets** → search **SoundRoot** → drag to panel.
 
 **Dependencies:** CMake, Extra CMake Modules, Qt 6, KDE Frameworks 6, PipeWire (with pipewire-pulse)
 
