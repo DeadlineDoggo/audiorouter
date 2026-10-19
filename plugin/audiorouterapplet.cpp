@@ -3,9 +3,12 @@
 #include <QDebug>
 #include <QAction>
 #include <QKeySequence>
+#include <QUuid>
 #include <KLocalizedString>
 #include <KGlobalAccel>
 #include <KActionCollection>
+
+#include "../backend/data/audiogroup.h"
 
 AudioRouterApplet::AudioRouterApplet(QObject *parent,
                                      const KPluginMetaData &data,
@@ -111,6 +114,16 @@ void AudioRouterApplet::applyGroup(int groupIndex)
                                   route.outputSinkNames,
                                   route.volumePercent);
 
+    // Create virtual sinks and their loopbacks.  Both calls are idempotent
+    // (re-applying an active room creates nothing twice), and the backend
+    // defers the loopbacks until the null-sink has finished loading.  Streams
+    // routed into a virtual sink are re-applied once it appears (see
+    // virtualSinkAppeared in setupConnections).
+    for (const auto &vs : group->virtualSinks) {
+        m_audioBackend.createVirtualSink(vs.paName, vs.displayName);
+        m_audioBackend.setVirtualSinkLoopbacks(vs.paName, vs.loopbackTargets);
+    }
+
     m_groupModel.setGroupActive(groupIndex, true);
 }
 
@@ -126,6 +139,10 @@ void AudioRouterApplet::deactivateGroup(int groupIndex)
         m_audioBackend.removeRoute(route.sourceAppName);
 
     m_audioBackend.cleanupStreamCombineSinks();
+
+    // Destroy virtual sinks (this also tears down their loopbacks)
+    for (const auto &vs : group->virtualSinks)
+        m_audioBackend.destroyVirtualSink(vs.paName);
 
     m_groupModel.setGroupActive(groupIndex, false);
 }
@@ -161,12 +178,113 @@ void AudioRouterApplet::moveInput(int inputIndex, const QString &sinkName)
 
 void AudioRouterApplet::routeStreamToSinks(int inputIndex, const QStringList &sinkNames)
 {
-    m_audioBackend.routeStreamToSinks(static_cast<uint32_t>(inputIndex), sinkNames);
+    // Keep the stream's current volume when it is moved onto a combine-sink
+    int volume = 100;
+    const auto inputs = m_audioBackend.availableSinkInputs();
+    for (const auto &si : inputs) {
+        if (static_cast<int>(si.index) == inputIndex) {
+            volume = si.volumePercent;
+            break;
+        }
+    }
+    m_audioBackend.routeStreamToSinks(static_cast<uint32_t>(inputIndex), sinkNames, volume);
+}
+
+void AudioRouterApplet::setSinkInputVolume(int inputIndex, int percent)
+{
+    const auto inputs = m_audioBackend.availableSinkInputs();
+    uint8_t channels = 2;
+    for (const auto &si : inputs) {
+        if (static_cast<int>(si.index) == inputIndex) {
+            channels = si.channels;
+            break;
+        }
+    }
+    m_audioBackend.setSinkInputVolume(static_cast<uint32_t>(inputIndex), percent, channels);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Internals
+// Virtual sink management
 // ═════════════════════════════════════════════════════════════════════════════
+
+QString AudioRouterApplet::addVirtualSink(int groupIndex, const QString &displayName)
+{
+    auto *group = m_groupModel.groupAt(groupIndex);
+    if (!group) return {};
+
+    // Generate a short unique PA-safe name
+    const QString paName = QStringLiteral("soundroot_virt_")
+        + QUuid::createUuid().toString(QUuid::Id128).left(8);
+
+    VirtualSinkDef def;
+    def.displayName = displayName;
+    def.paName = paName;
+    group->virtualSinks.append(def);
+    m_groupModel.save();
+
+    // If this room is currently active, create the null-sink immediately
+    if (group->active)
+        m_audioBackend.createVirtualSink(paName, displayName);
+
+    return paName;
+}
+
+void AudioRouterApplet::removeVirtualSink(int groupIndex, const QString &paName)
+{
+    auto *group = m_groupModel.groupAt(groupIndex);
+    if (!group) return;
+
+    // Destroy the PA module if the room is active
+    if (group->active)
+        m_audioBackend.destroyVirtualSink(paName);
+
+    group->virtualSinks.erase(
+        std::remove_if(group->virtualSinks.begin(), group->virtualSinks.end(),
+                       [&paName](const VirtualSinkDef &v) { return v.paName == paName; }),
+        group->virtualSinks.end());
+
+    m_groupModel.save();
+}
+
+QVariantList AudioRouterApplet::groupVirtualSinks(int groupIndex) const
+{
+    QVariantList result;
+    const auto *group = m_groupModel.groupAt(groupIndex);
+    if (!group) return result;
+
+    for (const auto &vs : group->virtualSinks) {
+        QVariantMap m;
+        m[QStringLiteral("displayName")] = vs.displayName;
+        m[QStringLiteral("paName")] = vs.paName;
+        m[QStringLiteral("loopbackTargets")] = QVariant::fromValue(vs.loopbackTargets);
+        result.append(m);
+    }
+    return result;
+}
+
+void AudioRouterApplet::setVirtualSinkLoopbackTargets(int groupIndex,
+                                                      const QString &paName,
+                                                      const QStringList &targets)
+{
+    auto *group = m_groupModel.groupAt(groupIndex);
+    if (!group) return;
+
+    // QML calls this for every virtual sink on each connection change, so
+    // only persist when the targets actually changed.
+    for (auto &vs : group->virtualSinks) {
+        if (vs.paName == paName) {
+            if (vs.loopbackTargets != targets) {
+                vs.loopbackTargets = targets;
+                m_groupModel.save();
+            }
+            break;
+        }
+    }
+
+    // If room is active, apply loopbacks now
+    if (group->active)
+        m_audioBackend.setVirtualSinkLoopbacks(paName, targets);
+}
 
 void AudioRouterApplet::setupConnections()
 {
@@ -183,6 +301,18 @@ void AudioRouterApplet::setupConnections()
     connect(&m_audioBackend, &PulseAudioBackend::sinkInputAdded,
             this, [this]() {
                 // Only signal QML if a room is actually active
+                for (int i = 0; i < m_groupModel.rowCount(); ++i) {
+                    if (m_groupModel.isGroupActive(i)) {
+                        m_reapplyTimer.start();
+                        return;
+                    }
+                }
+            });
+
+    // A virtual null-sink finished loading: streams routed into it could not
+    // be moved while it did not exist yet, so re-apply the active room.
+    connect(&m_audioBackend, &PulseAudioBackend::virtualSinkAppeared,
+            this, [this]() {
                 for (int i = 0; i < m_groupModel.rowCount(); ++i) {
                     if (m_groupModel.isGroupActive(i)) {
                         m_reapplyTimer.start();

@@ -43,15 +43,29 @@ PlasmaExtras.Representation {
     readonly property int masterVolume: Plasmoid.masterVolume ?? 100
     property bool scrollSyncing: false
 
+    // Virtual sinks for the selected room
+    property var virtualSinksList: []
+    property bool addingVsink: false
+
+    function refreshVirtualSinks() {
+        if (fullRoot.selectedRoomIndex >= 0)
+            virtualSinksList = Plasmoid.groupVirtualSinks(fullRoot.selectedRoomIndex)
+        else
+            virtualSinksList = []
+        connectionCanvas.requestPaint()
+    }
+
     readonly property var linkColors: ["#4a90d9", "#50c878", "#e74c3c", "#f39c12", "#9b59b6",
                                        "#1abc9c", "#e67e22", "#2ecc71", "#3498db", "#e91e63"]
 
     function selectRoom(idx) {
         selectedRoomIndex = idx
+        addingVsink = false
         if (fullRoot.routeModel && fullRoot.groupModel) {
             fullRoot.routeModel.groupId = fullRoot.groupModel.groupId(idx)
         }
         rebuildConnectionsFromModel()
+        refreshVirtualSinks()
     }
 
     function activateRoomAt(idx) {
@@ -102,6 +116,17 @@ PlasmaExtras.Representation {
             if (mx >= sp.x && mx <= sp.x + sinkItem.width &&
                 my >= sp.y && my <= sp.y + sinkItem.height)
                 return sinkItem.nodeKey
+        }
+        for (var v = 0; v < vsinkRepeater.count; v++) {
+            var vsItem = vsinkRepeater.itemAt(v)
+            if (!vsItem) continue
+            var vp = vsItem.mapToItem(connectionArea, 0, 0)
+            if (mx >= vp.x && mx <= vp.x + vsItem.width &&
+                my >= vp.y && my <= vp.y + vsItem.height) {
+                // Choose left (in) or right (out) side based on cursor position
+                var midX = vp.x + vsItem.width / 2
+                return mx < midX ? vsItem.nodeKeyIn : vsItem.nodeKeyOut
+            }
         }
         return ""
     }
@@ -227,6 +252,30 @@ PlasmaExtras.Representation {
     function syncConnectionsToModel() {
         if (!fullRoot.routeModel) return
 
+        // ── Virtual sink loopback targets ─────────────────────────────────
+        // Collect vsinkout → sink connections and persist them on the group
+        var vsinkLoopbacks = {}  // paName → [realSinkName, ...]
+        for (var lc = 0; lc < connections.length; lc++) {
+            var lconn = connections[lc]
+            var vpaFrom = "", rSinkTo = ""
+            if (lconn.from.indexOf("vsinkout:") === 0 && lconn.to.indexOf("sink:") === 0) {
+                vpaFrom = lconn.from.substring(9); rSinkTo = lconn.to.substring(5)
+            } else if (lconn.from.indexOf("sink:") === 0 && lconn.to.indexOf("vsinkout:") === 0) {
+                vpaFrom = lconn.to.substring(9); rSinkTo = lconn.from.substring(5)
+            }
+            if (vpaFrom !== "") {
+                if (!vsinkLoopbacks[vpaFrom]) vsinkLoopbacks[vpaFrom] = []
+                if (vsinkLoopbacks[vpaFrom].indexOf(rSinkTo) < 0) vsinkLoopbacks[vpaFrom].push(rSinkTo)
+            }
+        }
+        // Ensure vsinks with no connections also get their targets cleared
+        for (var vli = 0; vli < fullRoot.virtualSinksList.length; vli++) {
+            var vpaName = fullRoot.virtualSinksList[vli].paName
+            if (!(vpaName in vsinkLoopbacks)) vsinkLoopbacks[vpaName] = []
+        }
+        for (var vpa in vsinkLoopbacks)
+            Plasmoid.setVirtualSinkLoopbackTargets(fullRoot.selectedRoomIndex, vpa, vsinkLoopbacks[vpa])
+
         // Build ordinal map: inputIndex → { appName, ordinal }
         // Ordinal = order of appearance among same-app streams
         var appOrdCounters = {}
@@ -254,6 +303,11 @@ PlasmaExtras.Representation {
                 inputKey = c.from; sinkKey = c.to
             } else if (c.from.indexOf("sink:") === 0 && c.to.indexOf("input:") === 0) {
                 sinkKey = c.from; inputKey = c.to
+            } else if (c.from.indexOf("input:") === 0 && c.to.indexOf("vsinkin:") === 0) {
+                // Treat virtual sink input side as a real sink for routing
+                inputKey = c.from; sinkKey = "sink:" + c.to.substring(8)
+            } else if (c.from.indexOf("vsinkin:") === 0 && c.to.indexOf("input:") === 0) {
+                sinkKey = "sink:" + c.from.substring(8); inputKey = c.to
             } else if (c.from.indexOf("app:") === 0 && c.to.indexOf("sink:") === 0) {
                 var legKey = c.from.substring(4) + "\t0"
                 var legSink = c.to.substring(5)
@@ -305,6 +359,11 @@ PlasmaExtras.Representation {
                 iKey = conn.from; sKey = conn.to
             } else if (conn.from.indexOf("sink:") === 0 && conn.to.indexOf("input:") === 0) {
                 sKey = conn.from; iKey = conn.to
+            } else if (conn.from.indexOf("input:") === 0 && conn.to.indexOf("vsinkin:") === 0) {
+                // Virtual sink input side is a real PA sink for routing
+                iKey = conn.from; sKey = "sink:" + conn.to.substring(8)
+            } else if (conn.from.indexOf("vsinkin:") === 0 && conn.to.indexOf("input:") === 0) {
+                sKey = "sink:" + conn.from.substring(8); iKey = conn.to
             }
             if (iKey !== "" && sKey !== "") {
                 var idx = parseInt(iKey.substring(6))
@@ -357,7 +416,9 @@ PlasmaExtras.Representation {
                 var fromKey = "input:" + streams[ordinal]
                 var meta = streamMetaForKey(fromKey)
                 for (var k = 0; k < outputNames.length; k++) {
-                    var sk = "sink:" + outputNames[k]
+                    var rName = outputNames[k]
+                    var sk = rName.startsWith("soundroot_virt_")
+                        ? "vsinkin:" + rName : "sink:" + rName
                     if (!sinkColorMap[sk]) sinkColorMap[sk] = pickColor()
                     newConns.push({ from: fromKey, to: sk, color: sinkColorMap[sk],
                                     appName: meta.appName, mediaName: meta.mediaName })
@@ -368,7 +429,9 @@ PlasmaExtras.Representation {
                     var fk2 = "input:" + streams[j2]
                     var meta2 = streamMetaForKey(fk2)
                     for (var k2 = 0; k2 < outputNames.length; k2++) {
-                        var sk2 = "sink:" + outputNames[k2]
+                        var rName2 = outputNames[k2]
+                        var sk2 = rName2.startsWith("soundroot_virt_")
+                            ? "vsinkin:" + rName2 : "sink:" + rName2
                         if (!sinkColorMap[sk2]) sinkColorMap[sk2] = pickColor()
                         newConns.push({ from: fk2, to: sk2, color: sinkColorMap[sk2],
                                         appName: meta2.appName, mediaName: meta2.mediaName })
@@ -377,7 +440,9 @@ PlasmaExtras.Representation {
             } else {
                 // Stream not currently available — store as app: placeholder
                 for (var k3 = 0; k3 < outputNames.length; k3++) {
-                    var sk3 = "sink:" + outputNames[k3]
+                    var rName3 = outputNames[k3]
+                    var sk3 = rName3.startsWith("soundroot_virt_")
+                        ? "vsinkin:" + rName3 : "sink:" + rName3
                     if (!sinkColorMap[sk3]) sinkColorMap[sk3] = pickColor()
                     newConns.push({ from: "app:" + baseAppName, to: sk3, color: sinkColorMap[sk3],
                                     appName: baseAppName, mediaName: "" })
@@ -385,6 +450,24 @@ PlasmaExtras.Representation {
             }
         }
         connections = newConns
+
+        // Restore vsinkout → realSink connections from saved loopback targets
+        if (fullRoot.selectedRoomIndex >= 0) {
+            var vsData = Plasmoid.groupVirtualSinks(fullRoot.selectedRoomIndex)
+            for (var vsi = 0; vsi < vsData.length; vsi++) {
+                var vs = vsData[vsi]
+                var vsOutKey = "vsinkout:" + vs.paName
+                var ltargets = vs.loopbackTargets || []
+                for (var lti = 0; lti < ltargets.length; lti++) {
+                    var rsk = "sink:" + ltargets[lti]
+                    if (!sinkColorMap[rsk]) sinkColorMap[rsk] = pickColor()
+                    newConns.push({ from: vsOutKey, to: rsk, color: sinkColorMap[rsk],
+                                    appName: "", mediaName: "" })
+                }
+            }
+            connections = newConns
+        }
+
         connectionCanvas.requestPaint()
     }
 
@@ -502,6 +585,17 @@ PlasmaExtras.Representation {
             }
             if (!item) return null
             return item.mapToItem(connectionArea, 0, item.height / 2)
+        } else if (nodeKey.indexOf("vsinkin:") === 0 || nodeKey.indexOf("vsinkout:") === 0) {
+            var isIn = nodeKey.indexOf("vsinkin:") === 0
+            var vpaName = nodeKey.substring(isIn ? 8 : 9)
+            for (var vi = 0; vi < vsinkRepeater.count; vi++) {
+                var vsItem = vsinkRepeater.itemAt(vi)
+                if (vsItem && vsItem.paName === vpaName) { item = vsItem; break }
+            }
+            if (!item) return null
+            return isIn
+                ? item.mapToItem(connectionArea, 0, item.height / 2)
+                : item.mapToItem(connectionArea, item.width, item.height / 2)
         }
         return null
     }
@@ -515,7 +609,7 @@ PlasmaExtras.Representation {
             var p2 = getNodeEdge(conn.to)
             if (!p1 || !p2) continue
             // Normalize: app/input left, sink right
-            if (conn.from.indexOf("sink:") === 0) {
+            if (conn.from.indexOf("sink:") === 0 || conn.from.indexOf("vsinkin:") === 0) {
                 var _tmp = p1; p1 = p2; p2 = _tmp
             }
             var cpOff = Math.abs(p2.x - p1.x) * 0.4
@@ -904,6 +998,20 @@ PlasmaExtras.Representation {
                                     connectionCanvas.requestPaint()
                                 }
                             }
+
+                            PlasmaComponents.ToolButton {
+                                visible: fullRoot.selectedRoomIndex >= 0
+                                icon.name: "server-database"
+                                icon.width:  Kirigami.Units.iconSizes.small
+                                icon.height: Kirigami.Units.iconSizes.small
+                                opacity: hovered ? 1.0 : 0.55
+                                onClicked: {
+                                    fullRoot.addingVsink = !fullRoot.addingVsink
+                                    if (fullRoot.addingVsink)
+                                        Qt.callLater(function() { vsinkNameField.forceActiveFocus() })
+                                }
+                                PlasmaComponents.ToolTip { text: "Add Virtual Output" }
+                            }
                         }
 
                         // Master volume moved to bottom of the popup (see below)
@@ -947,9 +1055,9 @@ PlasmaExtras.Representation {
                                 var p1 = fullRoot.getNodeEdge(conn.from)
                                 var p2 = fullRoot.getNodeEdge(conn.to)
                                 if (!p1 || !p2) continue
-                                // Normalize: app/input is always left (p1), sink always right (p2)
+                                // Normalize: app/input/vsinkout is always left (p1), sink/vsinkin is right (p2)
                                 // so the bezier curve bows inward naturally
-                                if (conn.from.indexOf("sink:") === 0) {
+                                if (conn.from.indexOf("sink:") === 0 || conn.from.indexOf("vsinkin:") === 0) {
                                     var _tmp = p1; p1 = p2; p2 = _tmp
                                 }
 
@@ -1105,6 +1213,26 @@ PlasmaExtras.Representation {
                                                     opacity: 0.65
                                                     elide: Text.ElideRight
                                                 }
+                                                // ── Per-app volume slider ──────────────────
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: Kirigami.Units.smallSpacing
+                                                    QQC2.Slider {
+                                                        id: appVolSlider
+                                                        Layout.fillWidth: true
+                                                        from: 0; to: 150
+                                                        property int backendVol: model.volumePercent ?? 100
+                                                        onBackendVolChanged: if (!pressed) value = backendVol
+                                                        Component.onCompleted: value = backendVol
+                                                        onMoved: Plasmoid.setSinkInputVolume(model.inputIndex, Math.round(value))
+                                                    }
+                                                    PlasmaComponents.Label {
+                                                        text: Math.round(appVolSlider.value) + "%"
+                                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                                        opacity: 0.7
+                                                        Layout.minimumWidth: Kirigami.Units.gridUnit * 2
+                                                    }
+                                                }
                                             }
 
                                             // Connection dot / drag handle
@@ -1192,13 +1320,12 @@ PlasmaExtras.Representation {
                             }
                         }
 
-                        // ════ CENTER SPACER (wires drawn on canvas) ══
+                        // ════ CENTER SPACER (wires canvas, hidden when virtual column open) ══
                         Item {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            Layout.minimumWidth: Kirigami.Units.gridUnit * 6
+                            Layout.minimumWidth: Kirigami.Units.gridUnit * 2
 
-                            // Help text when no connections
                             PlasmaComponents.Label {
                                 anchors.centerIn: parent
                                 visible: fullRoot.connections.length === 0
@@ -1207,18 +1334,314 @@ PlasmaExtras.Representation {
                                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                                 horizontalAlignment: Text.AlignHCenter
                             }
-
-                            // Relay scroll events to the app list so the center area also scrolls
                             MouseArea {
                                 anchors.fill: parent
                                 acceptedButtons: Qt.NoButton
                                 onWheel: function(wheel) {
-                                    if (!fullRoot.scrollSyncing) {
+                                    if (!fullRoot.scrollSyncing)
                                         appListView.flick(0, wheel.angleDelta.y * 5)
-                                    }
                                 }
                                 z: -1
                             }
+                        }
+
+                        // ════ VIRTUAL SINKS COLUMN ═══════════════════
+                        // Fully hidden (zero layout space) when no virtual sinks and not adding.
+                        ColumnLayout {
+                            id: vsinkCol
+                            Layout.fillHeight: true
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 16
+                            Layout.minimumWidth: Kirigami.Units.gridUnit * 12
+                            // Hide completely — ColumnLayout with visible:false takes zero space
+                            visible: fullRoot.selectedRoomIndex >= 0 &&
+                                     (fullRoot.virtualSinksList.length > 0 || fullRoot.addingVsink)
+                            spacing: 0
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: vsinkHeaderRow.implicitHeight + Kirigami.Units.smallSpacing * 2
+                                color: "transparent"
+
+                                RowLayout {
+                                    id: vsinkHeaderRow
+                                    anchors.fill: parent
+                                    anchors.margins: Kirigami.Units.smallSpacing
+                                    spacing: 2
+
+                                    PlasmaComponents.Label {
+                                        text: "VIRTUAL"
+                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                        font.weight: Font.DemiBold
+                                        font.letterSpacing: 1.5
+                                        opacity: 0.5
+                                        Layout.fillWidth: true
+                                        horizontalAlignment: Text.AlignHCenter
+                                    }
+                                }
+                            }
+
+                            Kirigami.Separator { Layout.fillWidth: true; opacity: 0.15 }
+
+                            // Inline "add virtual sink" input row
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.leftMargin:  Kirigami.Units.smallSpacing
+                                Layout.rightMargin: Kirigami.Units.smallSpacing
+                                Layout.topMargin:   fullRoot.addingVsink ? Kirigami.Units.smallSpacing : 0
+                                spacing: Kirigami.Units.smallSpacing
+                                visible: fullRoot.addingVsink
+
+                                QQC2.TextField {
+                                    id: vsinkNameField
+                                    Layout.fillWidth: true
+                                    placeholderText: "Name…"
+                                    onAccepted: {
+                                        if (text.trim() !== "") {
+                                            Plasmoid.addVirtualSink(fullRoot.selectedRoomIndex, text.trim())
+                                            fullRoot.refreshVirtualSinks()
+                                        }
+                                        text = ""
+                                        fullRoot.addingVsink = false
+                                    }
+                                    Keys.onEscapePressed: {
+                                        text = ""; fullRoot.addingVsink = false
+                                    }
+                                }
+                                PlasmaComponents.ToolButton {
+                                    icon.name: "dialog-ok"
+                                    icon.width:  Kirigami.Units.iconSizes.small
+                                    icon.height: Kirigami.Units.iconSizes.small
+                                    onClicked: vsinkNameField.accepted()
+                                }
+                            }
+
+                            Column {
+                                id: vsinkListColumn
+                                Layout.fillWidth: true
+                                spacing: 4
+                                topPadding: Kirigami.Units.smallSpacing
+                                leftPadding: Kirigami.Units.smallSpacing
+                                rightPadding: Kirigami.Units.smallSpacing
+
+                                    Repeater {
+                                        id: vsinkRepeater
+                                        model: fullRoot.virtualSinksList
+
+                                        delegate: Rectangle {
+                                            id: vsinkCard
+                                            property string paName: modelData.paName || ""
+                                            property string displayName: modelData.displayName || ""
+                                            property string nodeKeyIn:  "vsinkin:"  + paName
+                                            property string nodeKeyOut: "vsinkout:" + paName
+
+                                            width: vsinkCol.width
+                                                   - vsinkListColumn.leftPadding
+                                                   - vsinkListColumn.rightPadding
+                                            // Fixed height: name row + dot row + padding
+                                            height: Kirigami.Units.gridUnit * 4
+                                            radius: 6
+                                            color: Qt.rgba(0.38, 0.20, 0.46, 0.18)
+                                            border.width: 1
+                                            border.color: Qt.rgba(0.61, 0.35, 0.71, 0.45)
+
+                                            // Top row: icon + name + delete button
+                                            RowLayout {
+                                                id: topRow
+                                                anchors.top: parent.top
+                                                anchors.left: parent.left
+                                                anchors.right: parent.right
+                                                anchors.margins: Kirigami.Units.smallSpacing
+                                                height: Kirigami.Units.gridUnit * 1.4
+                                                spacing: 4
+
+                                                PlasmaComponents.Label {
+                                                    text: vsinkCard.displayName
+                                                    font.bold: true
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                    verticalAlignment: Text.AlignVCenter
+                                                }
+
+                                                PlasmaComponents.ToolButton {
+                                                    icon.name: "edit-delete"
+                                                    icon.width:  Kirigami.Units.iconSizes.small
+                                                    icon.height: Kirigami.Units.iconSizes.small
+                                                    onClicked: {
+                                                        fullRoot.removeAllConnectionsFor(vsinkCard.nodeKeyIn)
+                                                        fullRoot.removeAllConnectionsFor(vsinkCard.nodeKeyOut)
+                                                        Plasmoid.removeVirtualSink(fullRoot.selectedRoomIndex, vsinkCard.paName)
+                                                        fullRoot.refreshVirtualSinks()
+                                                    }
+                                                    PlasmaComponents.ToolTip { text: "Delete tunnel" }
+                                                }
+                                            }
+
+                                            // Bottom row: IN dot ── ▶ ── OUT dot
+                                            RowLayout {
+                                                anchors.top: topRow.bottom
+                                                anchors.left: parent.left
+                                                anchors.right: parent.right
+                                                anchors.bottom: parent.bottom
+                                                anchors.leftMargin: Kirigami.Units.smallSpacing * 2
+                                                anchors.rightMargin: Kirigami.Units.smallSpacing * 2
+                                                anchors.bottomMargin: Kirigami.Units.smallSpacing
+                                                spacing: 4
+
+                                                // IN label + dot
+                                                Column {
+                                                    spacing: 1
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    PlasmaComponents.Label {
+                                                        text: "IN"
+                                                        font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.75
+                                                        font.weight: Font.DemiBold
+                                                        opacity: 0.5
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                    }
+                                                    Rectangle {
+                                                        id: vsinkInDot
+                                                        width: 13; height: 13; radius: 7
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                        color: {
+                                                            var gc = fullRoot.findGroupColor(vsinkCard.nodeKeyIn)
+                                                            return gc !== "" ? gc : "#9b59b6"
+                                                        }
+                                                        border.width: 2
+                                                        border.color: Qt.lighter(color, 1.5)
+                                                        MouseArea {
+                                                            anchors.fill: parent; anchors.margins: -8
+                                                            cursorShape: Qt.CrossCursor; preventStealing: true
+                                                            onPressed: function(mouse) {
+                                                                var mp = vsinkInDot.mapToItem(connectionArea, vsinkInDot.width/2, vsinkInDot.height/2)
+                                                                fullRoot.isDragging = true
+                                                                fullRoot.dragFrom = vsinkCard.nodeKeyIn
+                                                                fullRoot.dragStartX = mp.x; fullRoot.dragStartY = mp.y
+                                                                fullRoot.dragEndX = mp.x;   fullRoot.dragEndY = mp.y
+                                                                connectionCanvas.requestPaint()
+                                                            }
+                                                            onPositionChanged: function(mouse) {
+                                                                if (fullRoot.isDragging) {
+                                                                    var p = mapToItem(connectionArea, mouse.x, mouse.y)
+                                                                    fullRoot.dragEndX = p.x; fullRoot.dragEndY = p.y
+                                                                    connectionCanvas.requestPaint()
+                                                                }
+                                                            }
+                                                            onReleased: function(mouse) {
+                                                                if (fullRoot.isDragging) {
+                                                                    var p = mapToItem(connectionArea, mouse.x, mouse.y)
+                                                                    var tgt = fullRoot.findNodeAt(p.x, p.y)
+                                                                    if (tgt !== "" && tgt !== fullRoot.dragFrom) {
+                                                                        fullRoot.addConnection(fullRoot.dragFrom, tgt)
+                                                                        fullRoot.isDragging = false; fullRoot.dragFrom = ""
+                                                                        connectionCanvas.requestPaint()
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // Arrow line
+                                                Rectangle {
+                                                    Layout.fillWidth: true
+                                                    height: 1
+                                                    opacity: 0.4
+                                                    color: "#c07ad8"
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                }
+                                                PlasmaComponents.Label {
+                                                    text: "▶"
+                                                    font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.7
+                                                    opacity: 0.6
+                                                    color: "#c07ad8"
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                }
+                                                Rectangle {
+                                                    Layout.fillWidth: true
+                                                    height: 1
+                                                    opacity: 0.4
+                                                    color: "#c07ad8"
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                }
+
+                                                // OUT label + dot
+                                                Column {
+                                                    spacing: 1
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    PlasmaComponents.Label {
+                                                        text: "OUT"
+                                                        font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.75
+                                                        font.weight: Font.DemiBold
+                                                        opacity: 0.5
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                    }
+                                                    Rectangle {
+                                                        id: vsinkOutDot
+                                                        width: 13; height: 13; radius: 7
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                        color: {
+                                                            var gc = fullRoot.findGroupColor(vsinkCard.nodeKeyOut)
+                                                            return gc !== "" ? gc : "#9b59b6"
+                                                        }
+                                                        border.width: 2
+                                                        border.color: Qt.lighter(color, 1.5)
+                                                        MouseArea {
+                                                            anchors.fill: parent; anchors.margins: -8
+                                                            cursorShape: Qt.CrossCursor; preventStealing: true
+                                                            onPressed: function(mouse) {
+                                                                var mp = vsinkOutDot.mapToItem(connectionArea, vsinkOutDot.width/2, vsinkOutDot.height/2)
+                                                                fullRoot.isDragging = true
+                                                                fullRoot.dragFrom = vsinkCard.nodeKeyOut
+                                                                fullRoot.dragStartX = mp.x; fullRoot.dragStartY = mp.y
+                                                                fullRoot.dragEndX = mp.x;   fullRoot.dragEndY = mp.y
+                                                                connectionCanvas.requestPaint()
+                                                            }
+                                                            onPositionChanged: function(mouse) {
+                                                                if (fullRoot.isDragging) {
+                                                                    var p = mapToItem(connectionArea, mouse.x, mouse.y)
+                                                                    fullRoot.dragEndX = p.x; fullRoot.dragEndY = p.y
+                                                                    connectionCanvas.requestPaint()
+                                                                }
+                                                            }
+                                                            onReleased: function(mouse) {
+                                                                if (fullRoot.isDragging) {
+                                                                    var p = mapToItem(connectionArea, mouse.x, mouse.y)
+                                                                    var tgt = fullRoot.findNodeAt(p.x, p.y)
+                                                                    if (tgt !== "" && tgt !== fullRoot.dragFrom) {
+                                                                        fullRoot.addConnection(fullRoot.dragFrom, tgt)
+                                                                        fullRoot.isDragging = false; fullRoot.dragFrom = ""
+                                                                        connectionCanvas.requestPaint()
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Right-click to remove all connections
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                acceptedButtons: Qt.RightButton
+                                                onClicked: {
+                                                    fullRoot.removeAllConnectionsFor(vsinkCard.nodeKeyIn)
+                                                    fullRoot.removeAllConnectionsFor(vsinkCard.nodeKeyOut)
+                                                }
+                                                z: -1
+                                            }
+                                        }
+                                    }
+
+                            }
+                        }
+
+                        // Thin separator before outputs
+                        Rectangle {
+                            Layout.fillHeight: true
+                            width: 1
+                            opacity: 0.1
+                            color: Kirigami.Theme.textColor
+                            visible: fullRoot.selectedRoomIndex >= 0
                         }
 
                         // ════ OUTPUT DEVICES COLUMN ══════════════════
@@ -1273,7 +1696,9 @@ PlasmaExtras.Representation {
                                         property string nodeName: model.sinkName || ""
                                         property string nodeKey: "sink:" + nodeName
                                         width: outListView.width - outListView.leftMargin - outListView.rightMargin
-                                        height: sinkCardCol.implicitHeight + Kirigami.Units.smallSpacing * 2
+                                        height: model.isVirtual ? 0 : (sinkCardCol.implicitHeight + Kirigami.Units.smallSpacing * 2)
+                                        visible: !model.isVirtual
+                                        clip: true
                                         radius: Kirigami.Units.smallSpacing
                                         color: {
                                             var gc = fullRoot.findGroupColor(nodeKey)
@@ -1547,7 +1972,7 @@ PlasmaExtras.Representation {
                         opacity: 0.75
                     }
                     PlasmaComponents.Label {
-                        text: "Master"
+                        text: "Default Output"
                         font.pointSize: Kirigami.Theme.smallFont.pointSize
                         opacity: 0.6
                     }

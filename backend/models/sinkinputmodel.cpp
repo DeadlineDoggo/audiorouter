@@ -20,12 +20,13 @@ QVariant SinkInputModel::data(const QModelIndex &index, int role) const
 
     const auto &si = m_sinkInputs[index.row()];
     switch (role) {
-    case IndexRole:     return si.index;
-    case AppNameRole:   return si.appName;
-    case MediaNameRole: return si.mediaName;
-    case SinkIndexRole: return si.sinkIndex;
-    case IconNameRole:  return si.iconName;
-    case Qt::DisplayRole: return si.appName;
+    case IndexRole:        return si.index;
+    case AppNameRole:      return si.appName;
+    case MediaNameRole:    return si.mediaName;
+    case SinkIndexRole:    return si.sinkIndex;
+    case IconNameRole:     return si.iconName;
+    case VolumePercentRole: return si.volumePercent;
+    case Qt::DisplayRole:  return si.appName;
     }
     return {};
 }
@@ -33,11 +34,12 @@ QVariant SinkInputModel::data(const QModelIndex &index, int role) const
 QHash<int, QByteArray> SinkInputModel::roleNames() const
 {
     return {
-        { IndexRole,     "inputIndex"       },
-        { AppNameRole,   "appName"          },
-        { MediaNameRole, "mediaName"        },
-        { SinkIndexRole, "currentSinkIndex" },
-        { IconNameRole,  "iconName"         }
+        { IndexRole,          "inputIndex"       },
+        { AppNameRole,        "appName"          },
+        { MediaNameRole,      "mediaName"        },
+        { SinkIndexRole,      "currentSinkIndex" },
+        { IconNameRole,       "iconName"         },
+        { VolumePercentRole,  "volumePercent"    }
     };
 }
 
@@ -67,7 +69,7 @@ void SinkInputModel::refresh()
                 const auto &o = m_sinkInputs[i];
                 const auto &n = newInputs[i];
                 if (o.sinkIndex != n.sinkIndex || o.mediaName != n.mediaName ||
-                    o.iconName != n.iconName) {
+                    o.iconName != n.iconName || o.volumePercent != n.volumePercent) {
                     m_sinkInputs[i] = n;
                     emit dataChanged(index(i), index(i));
                 }

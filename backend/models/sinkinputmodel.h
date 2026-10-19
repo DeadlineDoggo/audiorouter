@@ -19,7 +19,8 @@ public:
         AppNameRole,
         MediaNameRole,
         SinkIndexRole,
-        IconNameRole
+        IconNameRole,
+        VolumePercentRole
     };
 
     explicit SinkInputModel(PulseAudioBackend *backend, QObject *parent = nullptr);

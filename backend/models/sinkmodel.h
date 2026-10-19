@@ -17,7 +17,8 @@ public:
         NameRole,
         DescriptionRole,
         VolumeRole,
-        MutedRole
+        MutedRole,
+        IsVirtualRole
     };
 
     explicit SinkModel(PulseAudioBackend *backend, QObject *parent = nullptr);

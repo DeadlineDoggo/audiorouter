@@ -3,6 +3,7 @@
 #include <Plasma/Applet>
 #include <KGlobalAccel>
 #include <QTimer>
+#include <QVariantList>
 
 #include "audiobackend.h"
 #include "models/grouplistmodel.h"
@@ -62,6 +63,20 @@ public:
     Q_INVOKABLE void moveInput(int inputIndex, const QString &sinkName);
     /// Route a specific stream to one or more sinks (combine-sink for multi).
     Q_INVOKABLE void routeStreamToSinks(int inputIndex, const QStringList &sinkNames);
+    /// Set the volume of a specific stream by its PA index (0-150%).
+    Q_INVOKABLE void setSinkInputVolume(int inputIndex, int percent);
+
+    // ── Virtual sink management ────────────────────────────────────────
+    /// Add a new virtual null-sink to a room. Returns the generated PA name.
+    Q_INVOKABLE QString addVirtualSink(int groupIndex, const QString &displayName);
+    /// Remove (and destroy if active) a virtual sink from a room.
+    Q_INVOKABLE void removeVirtualSink(int groupIndex, const QString &paName);
+    /// Returns [{displayName, paName, loopbackTargets:[...]}] for QML.
+    Q_INVOKABLE QVariantList groupVirtualSinks(int groupIndex) const;
+    /// Update the real-sink loopback targets of a virtual sink in a room.
+    Q_INVOKABLE void setVirtualSinkLoopbackTargets(int groupIndex,
+                                                   const QString &paName,
+                                                   const QStringList &targets);
 signals:
     void nextRoomActivated();
     void prevRoomActivated();

@@ -25,6 +25,7 @@ QVariant SinkModel::data(const QModelIndex &index, int role) const
     case DescriptionRole: return sink.description;
     case VolumeRole:      return sink.volumePercent;
     case MutedRole:       return sink.isMuted;
+    case IsVirtualRole:   return sink.name.startsWith(QStringLiteral("soundroot_virt_"));
     case Qt::DisplayRole: return sink.description;
     }
     return {};
@@ -37,7 +38,8 @@ QHash<int, QByteArray> SinkModel::roleNames() const
         { NameRole,        "sinkName"           },
         { DescriptionRole, "sinkDescription"   },
         { VolumeRole,      "sinkVolumePercent" },
-        { MutedRole,       "sinkMuted"         }
+        { MutedRole,        "sinkMuted"         },
+        { IsVirtualRole,    "isVirtual"         }
     };
 }
 

@@ -7,6 +7,22 @@
 #include <QUuid>
 
 /**
+ * @brief A per-room virtual null-sink definition.
+ *
+ * Each instance maps to one module-null-sink loaded while the room is active.
+ * `loopbackTargets` lists the real PA sink names that receive the virtual
+ * sink's monitor output via module-loopback.
+ */
+struct VirtualSinkDef {
+    QString displayName;          ///< User-visible label (e.g. "Gaming Mix")
+    QString paName;               ///< PA internal name (e.g. "soundroot_virt_abc123")
+    QStringList loopbackTargets;  ///< Real sink names this virtual sink feeds into
+
+    QJsonObject toJson() const;
+    static VirtualSinkDef fromJson(const QJsonObject &obj);
+};
+
+/**
  * @brief A single audio route: one source application routed to one or more output sinks.
  *
  * Sources are identified by application name (pattern-matched against active PulseAudio
@@ -36,6 +52,7 @@ struct AudioGroup {
     QString icon;
     bool active = false;
     QVector<AudioRoute> routes;
+    QVector<VirtualSinkDef> virtualSinks;
 
     AudioGroup();
     explicit AudioGroup(const QString &name, const QString &color = QStringLiteral("#4a90d9"),

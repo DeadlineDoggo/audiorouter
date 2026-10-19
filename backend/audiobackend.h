@@ -3,6 +3,7 @@
 #include <QMap>
 #include <QMutex>
 #include <QObject>
+#include <QSet>
 #include <QVector>
 
 #include <pulse/pulseaudio.h>
@@ -25,6 +26,7 @@ struct PASinkInputInfo {
     uint32_t sinkIndex = PA_INVALID_INDEX; ///< Currently routed sink
     QString  iconName;      ///< Freedesktop icon name of the app
     uint8_t  channels = 2;  ///< Stream channel count for volume operations
+    int      volumePercent = 100; ///< Current stream volume (0-150%)
 };
 
 // ── PulseAudio backend ─────────────────────────────────────────────────────
@@ -87,10 +89,28 @@ public:
 
     /// Route a specific sink-input to one or more sinks.
     /// Creates a combine-sink when multiple sinks are specified.
-    void routeStreamToSinks(uint32_t sinkInputIndex, const QStringList &sinkNames);
+    void routeStreamToSinks(uint32_t sinkInputIndex, const QStringList &sinkNames,
+                            int volumePercent = 100);
 
     /// Destroy all per-stream combine sinks (audiorouter_stream_*).
     void cleanupStreamCombineSinks();
+
+    // ── Virtual null-sink / loopback management ──────────────────────────
+    // All of these are idempotent: they record the desired state and only
+    // load/unload the modules needed to reach it.  Module loads that finish
+    // after their key stopped being wanted are unloaded in the callback.
+
+    /// Load a module-null-sink with the given PA name and user-visible description.
+    /// No-op if it is already loaded or loading.
+    void createVirtualSink(const QString &paName, const QString &displayName);
+    /// Unload the virtual null-sink and all loopbacks attached to it.
+    void destroyVirtualSink(const QString &paName);
+    /// Set the loopbacks routing virtualSink.monitor → each target.  Only the
+    /// difference to the current set is loaded/unloaded.  Loopbacks requested
+    /// before the null-sink finished loading are created once it is ready.
+    void setVirtualSinkLoopbacks(const QString &paName, const QStringList &targetSinks);
+    /// Destroy all virtual sinks (and their loopbacks). Called on shutdown/deactivate.
+    void destroyAllVirtualSinks();
 
 signals:
     void sinksChanged();
@@ -101,12 +121,20 @@ signals:
     void serverDisconnected();
     /// Emitted whenever the default sink’s volume changes.
     void defaultSinkVolumeChanged(int volumePercent);
+    /// Emitted when one of our virtual null-sinks shows up in the sink list,
+    /// so streams routed to it can be (re)applied.
+    void virtualSinkAppeared();
     void errorOccurred(const QString &message);
 
 private:
     // ── Internal refresh helpers (must be called with PA lock held) ──────
     void refreshSinksLocked();
     void refreshSinkInputsLocked();
+
+    // ── Virtual sink helpers (must be called with PA lock held) ─────────
+    void unloadModuleLocked(uint32_t moduleIndex);
+    /// Load every wanted loopback of paName that is neither loaded nor loading.
+    void loadMissingLoopbacksLocked(const QString &paName);
 
     // ── Public-facing refresh (acquires PA lock) ────────────────────────
     void refreshSinks();
@@ -133,6 +161,7 @@ private:
                                       const pa_sink_input_info *info,
                                       int eol, void *userdata);
     static void moduleLoadCallback(pa_context *c, uint32_t idx, void *userdata);
+    static void virtualModuleLoadCallback(pa_context *c, uint32_t idx, void *userdata);
     static void successCallback(pa_context *c, int success, void *userdata);
 
     // ── Members ─────────────────────────────────────────────────────────
@@ -144,6 +173,12 @@ private:
     QVector<PASinkInputInfo>    m_sinkInputs;
     QMap<QString, uint32_t>     m_combinedModules;   // name → module index
     QMap<QString, QStringList>   m_combinedSlaves;    // name → slave sink names
+    // Virtual sinks / loopbacks (only touched with the PA mainloop lock held)
+    QMap<QString, uint32_t>     m_virtualSinkModules; // paName → module index
+    QMap<QString, uint32_t>     m_loopbackModules;   // "paName|sinkName" → module index
+    QSet<QString>               m_wantedVirtualSinks; // desired paNames
+    QSet<QString>               m_wantedLoopbacks;    // desired "paName|sinkName"
+    QSet<QString>               m_pendingVirtualLoads; // keys of either kind with a load in flight
 
     // Pending buffers for atomic refresh (only accessed from PA thread)
     QVector<PASinkInfo>         m_pendingSinks;
@@ -155,9 +190,9 @@ private:
     bool     m_hasNewSinkInput  = false;
     int      m_lastSinkInputCount = 0;  // post-filter count for detecting real new streams
 
-    // Generation counters – bumped in subscribeCallback each time a new
-    // enumeration starts.  The sinkInputInfoCallback / sinkInfoCallback
-    // eol handler ignores results whose generation doesn't match.
+    // Generation counters – bumped each time a new enumeration starts.  Each
+    // request carries its generation in its userdata; results from an older,
+    // superseded request are discarded.
     uint64_t m_sinkInputGen     = 0;
     uint64_t m_sinkGen          = 0;
 
