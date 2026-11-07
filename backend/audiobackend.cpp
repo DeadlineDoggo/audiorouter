@@ -443,30 +443,48 @@ void PulseAudioBackend::routeStreamToSinks(uint32_t sinkInputIndex,
         return;
     }
 
-    // Check if a combine-sink with the same slaves already exists
+    // Check if a combine-sink with the same slaves already exists.
+    // Decide under m_mutex, but act after releasing it: moveSinkInput() takes
+    // the PA mainloop lock, and the PA callbacks take the locks in the opposite
+    // order (PA lock, then m_mutex) — holding both here could deadlock.
+    enum class ExistingCombine { None, AlreadyRouted, MoveStream, NotRegisteredYet };
+    ExistingCombine existing = ExistingCombine::None;
+    uint32_t existingSinkIdx = PA_INVALID_INDEX;
     {
         QMutexLocker lock(&m_mutex);
-        if (m_combinedModules.contains(combinedName)) {
-            auto existingSlaves = m_combinedSlaves.value(combinedName);
-            if (existingSlaves == availableSinks) {
-                // Combine-sink is correct — just ensure stream is on it
-                for (const auto &sink : m_sinks) {
-                    if (sink.name == combinedName) {
-                        // Check if stream is already on this sink
-                        for (const auto &si : m_sinkInputs) {
-                            if (si.index == sinkInputIndex && si.sinkIndex == sink.index)
-                                return;  // Already correctly routed
-                        }
-                        // Stream exists but on wrong sink — move it
-                        moveSinkInput(sinkInputIndex, sink.index);
-                        return;
+        if (m_combinedModules.contains(combinedName) &&
+            m_combinedSlaves.value(combinedName) == availableSinks) {
+            // Combine-sink is correct — just ensure stream is on it
+            existing = ExistingCombine::NotRegisteredYet;
+            for (const auto &sink : m_sinks) {
+                if (sink.name != combinedName)
+                    continue;
+                existingSinkIdx = sink.index;
+                existing = ExistingCombine::MoveStream;
+                for (const auto &si : m_sinkInputs) {
+                    if (si.index == sinkInputIndex && si.sinkIndex == sink.index) {
+                        existing = ExistingCombine::AlreadyRouted;
+                        break;
                     }
                 }
-                // Combine-sink module exists but sink not yet in m_sinks —
-                // wait for PA to register it (will be picked up by next reapply)
-                return;
+                break;
             }
         }
+    }
+
+    switch (existing) {
+    case ExistingCombine::AlreadyRouted:
+        return;
+    case ExistingCombine::MoveStream:
+        // Stream exists but on wrong sink — move it
+        moveSinkInput(sinkInputIndex, existingSinkIdx);
+        return;
+    case ExistingCombine::NotRegisteredYet:
+        // Combine-sink module exists but sink not yet in m_sinks —
+        // wait for PA to register it (will be picked up by next reapply)
+        return;
+    case ExistingCombine::None:
+        break;
     }
 
     // Different slaves needed — destroy old and create new
