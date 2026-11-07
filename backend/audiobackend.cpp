@@ -1,6 +1,8 @@
 #include "audiobackend.h"
 
 #include <QDebug>
+#include <QElapsedTimer>
+#include <QThread>
 #include <QTimer>
 #include <QtGlobal>
 
@@ -78,20 +80,43 @@ void PulseAudioBackend::initialize()
 
 void PulseAudioBackend::shutdown()
 {
-    // Unload combined sink modules while the mainloop is still running so the
+    // Unload our modules while the mainloop is still running so the
     // operations actually execute.  Under native PulseAudio (unlike PipeWire)
     // modules are NOT auto-removed when a client disconnects.
     if (m_mainloop && m_context && m_connected) {
         pa_threaded_mainloop_lock(m_mainloop);
-        for (auto it = m_combinedModules.cbegin(); it != m_combinedModules.cend(); ++it)
-            pa_context_unload_module(m_context, it.value(), nullptr, nullptr);
         {
             QMutexLocker lock(&m_mutex);
+            for (auto it = m_combinedModules.cbegin(); it != m_combinedModules.cend(); ++it)
+                unloadModuleLocked(it.value());
             m_combinedModules.clear();
-            m_combinedSlaves.clear();
+            m_combinedSlaves.clear();   // loads still in flight are unloaded on completion
         }
         pa_threaded_mainloop_unlock(m_mainloop);
-        destroyAllVirtualSinks();
+        destroyAllVirtualSinks();       // same for virtual sinks / loopbacks
+
+        // Queued operations only reach the server if we keep the connection
+        // open until they are done: wait for the unloads, and for loads still
+        // in flight (their callbacks unload them).  Bounded so a stuck server
+        // cannot hang the shell on exit.
+        QElapsedTimer waited;
+        waited.start();
+        pa_threaded_mainloop_lock(m_mainloop);
+        while (waited.elapsed() < kShutdownWaitMs && m_connected) {
+            bool busy = m_pendingUnloads > 0 || !m_pendingVirtualLoads.isEmpty();
+            if (!busy) {
+                QMutexLocker lock(&m_mutex);
+                busy = !m_pendingCombined.isEmpty();
+            }
+            if (!busy) break;
+            pa_threaded_mainloop_unlock(m_mainloop);
+            QThread::msleep(5);
+            pa_threaded_mainloop_lock(m_mainloop);
+        }
+        if (m_pendingUnloads > 0)
+            qWarning() << "AudioRouter: shutdown timed out with" << m_pendingUnloads
+                       << "module unload(s) unconfirmed";
+        pa_threaded_mainloop_unlock(m_mainloop);
     }
 
     if (m_mainloop)
@@ -109,6 +134,7 @@ void PulseAudioBackend::shutdown()
     }
 
     m_connected = false;
+    m_pendingUnloads = 0;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -709,8 +735,22 @@ void PulseAudioBackend::destroyAllVirtualSinks()
 
 void PulseAudioBackend::unloadModuleLocked(uint32_t moduleIndex)
 {
-    pa_operation *op = pa_context_unload_module(m_context, moduleIndex, nullptr, nullptr);
+    ++m_pendingUnloads;
+    pa_operation *op = pa_context_unload_module(
+        m_context, moduleIndex, unloadModuleCallback, this);
     if (op) pa_operation_unref(op);
+    else    --m_pendingUnloads;
+}
+
+void PulseAudioBackend::unloadModuleCallback(pa_context * /*c*/, int success,
+                                             void *userdata)
+{
+    // Runs on the PA thread with the mainloop lock held.
+    auto *self = static_cast<PulseAudioBackend *>(userdata);
+    if (self->m_pendingUnloads > 0)
+        --self->m_pendingUnloads;
+    if (!success)
+        qWarning() << "AudioRouter: failed to unload module";
 }
 
 void PulseAudioBackend::loadMissingLoopbacksLocked(const QString &paName)

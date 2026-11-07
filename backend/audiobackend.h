@@ -167,6 +167,7 @@ private:
     static void moduleLoadCallback(pa_context *c, uint32_t idx, void *userdata);
     static void virtualModuleLoadCallback(pa_context *c, uint32_t idx, void *userdata);
     static void successCallback(pa_context *c, int success, void *userdata);
+    static void unloadModuleCallback(pa_context *c, int success, void *userdata);
 
     // ── Members ─────────────────────────────────────────────────────────
     pa_threaded_mainloop *m_mainloop = nullptr;
@@ -184,6 +185,8 @@ private:
     QSet<QString>               m_wantedVirtualSinks; // desired paNames
     QSet<QString>               m_wantedLoopbacks;    // desired "paName|sinkName"
     QSet<QString>               m_pendingVirtualLoads; // keys of either kind with a load in flight
+    int                         m_pendingUnloads = 0; // unload ops issued, not yet confirmed (PA lock)
+    static constexpr int        kShutdownWaitMs = 1500; // max wait for module cleanup on exit
 
     // Pending buffers for atomic refresh (only accessed from PA thread)
     QVector<PASinkInfo>         m_pendingSinks;
