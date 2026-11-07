@@ -10,6 +10,7 @@
 struct ModuleLoadData {
     PulseAudioBackend *backend;
     QString combinedName;
+    QStringList slaves;   // slaves this particular load was started with
 };
 
 // Data passed through virtual-sink / loopback module-load callbacks
@@ -84,8 +85,11 @@ void PulseAudioBackend::shutdown()
         pa_threaded_mainloop_lock(m_mainloop);
         for (auto it = m_combinedModules.cbegin(); it != m_combinedModules.cend(); ++it)
             pa_context_unload_module(m_context, it.value(), nullptr, nullptr);
-        m_combinedModules.clear();
-        m_combinedSlaves.clear();
+        {
+            QMutexLocker lock(&m_mutex);
+            m_combinedModules.clear();
+            m_combinedSlaves.clear();
+        }
         pa_threaded_mainloop_unlock(m_mainloop);
         destroyAllVirtualSinks();
     }
@@ -172,37 +176,82 @@ void PulseAudioBackend::createCombinedSink(const QString &name,
 {
     if (!m_context || !m_connected || sinkNames.isEmpty()) return;
 
-    // module-combine-sink arguments
-    const QString slaves = sinkNames.join(QLatin1Char(','));
-    const QString args   = QStringLiteral("sink_name=%1 slaves=%2").arg(name, slaves);
-
-    auto *data = new ModuleLoadData{this, name};
-
+    // Lock order: PA mainloop lock first, then m_mutex (same as the callbacks).
     pa_threaded_mainloop_lock(m_mainloop);
+
+    bool startLoad = false;
+    uint32_t staleModule = PA_INVALID_INDEX;
+    {
+        QMutexLocker lock(&m_mutex);
+        const QStringList previous = m_combinedSlaves.value(name);
+        m_combinedSlaves[name] = sinkNames;   // desired state
+
+        auto loaded = m_combinedModules.find(name);
+        if (loaded != m_combinedModules.end()) {
+            if (previous == sinkNames) {
+                // Already loaded with exactly these slaves
+                pa_threaded_mainloop_unlock(m_mainloop);
+                return;
+            }
+            // Loaded with different slaves: replace it
+            staleModule = loaded.value();
+            m_combinedModules.erase(loaded);
+        }
+
+        // A load for this name may still be in flight.  Never start a second
+        // one (the name would clash); moduleLoadCallback reconciles the result
+        // with the desired slaves once it completes.
+        if (!m_pendingCombined.contains(name)) {
+            m_pendingCombined.insert(name, sinkNames);
+            startLoad = true;
+        }
+    }
+
+    if (staleModule != PA_INVALID_INDEX)
+        unloadModuleLocked(staleModule);
+    if (startLoad)
+        loadCombinedLocked(name, sinkNames);
+
+    pa_threaded_mainloop_unlock(m_mainloop);
+}
+
+void PulseAudioBackend::loadCombinedLocked(const QString &name,
+                                           const QStringList &sinkNames)
+{
+    // module-combine-sink arguments
+    const QString args = QStringLiteral("sink_name=%1 slaves=%2")
+                             .arg(name, sinkNames.join(QLatin1Char(',')));
+
+    auto *data = new ModuleLoadData{this, name, sinkNames};
     pa_operation *op = pa_context_load_module(
         m_context, "module-combine-sink",
         args.toUtf8().constData(),
         moduleLoadCallback, data);
-    if (op) pa_operation_unref(op);
-    pa_threaded_mainloop_unlock(m_mainloop);
+    if (op) {
+        pa_operation_unref(op);
+    } else {
+        // Nothing in flight after all: let the next create retry
+        delete data;
+        QMutexLocker lock(&m_mutex);
+        m_pendingCombined.remove(name);
+    }
 }
 
 void PulseAudioBackend::destroyCombinedSink(const QString &name)
 {
     if (!m_context || !m_connected) return;
 
-    uint32_t moduleIdx;
+    uint32_t moduleIdx = PA_INVALID_INDEX;
     {
         QMutexLocker lock(&m_mutex);
+        // No longer wanted.  A load still in flight is unloaded by
+        // moduleLoadCallback when it completes.
+        m_combinedSlaves.remove(name);
         auto it = m_combinedModules.find(name);
-        if (it == m_combinedModules.end()) {
-            // Module entry absent (e.g. load failed), but still clean up slaves
-            m_combinedSlaves.remove(name);
+        if (it == m_combinedModules.end())
             return;
-        }
         moduleIdx = it.value();
         m_combinedModules.erase(it);
-        m_combinedSlaves.remove(name);
     }
 
     pa_threaded_mainloop_lock(m_mainloop);
@@ -449,7 +498,8 @@ void PulseAudioBackend::routeStreamToSinks(uint32_t sinkInputIndex,
     uint32_t existingSinkIdx = PA_INVALID_INDEX;
     {
         QMutexLocker lock(&m_mutex);
-        if (m_combinedModules.contains(combinedName) &&
+        if ((m_combinedModules.contains(combinedName) ||
+             m_pendingCombined.contains(combinedName)) &&
             m_combinedSlaves.value(combinedName) == availableSinks) {
             // Combine-sink is correct — just ensure stream is on it
             existing = ExistingCombine::NotRegisteredYet;
@@ -500,10 +550,6 @@ void PulseAudioBackend::routeStreamToSinks(uint32_t sinkInputIndex,
     }
 
     // Create combine sink and move stream to it
-    {
-        QMutexLocker lock(&m_mutex);
-        m_combinedSlaves[combinedName] = availableSinks;
-    }
     createCombinedSink(combinedName, availableSinks);
 
     QVector<QPair<uint32_t, uint8_t>> inputs;
@@ -518,9 +564,15 @@ void PulseAudioBackend::cleanupStreamCombineSinks()
     QStringList toRemove;
     {
         QMutexLocker lock(&m_mutex);
-        for (auto it = m_combinedModules.begin(); it != m_combinedModules.end(); ++it) {
-            if (it.key().startsWith(QStringLiteral("audiorouter_stream_")))
-                toRemove.append(it.key());
+        // Loaded modules, plus wanted ones whose load is still in flight
+        QSet<QString> names;
+        for (auto it = m_combinedModules.cbegin(); it != m_combinedModules.cend(); ++it)
+            names.insert(it.key());
+        for (auto it = m_combinedSlaves.cbegin(); it != m_combinedSlaves.cend(); ++it)
+            names.insert(it.key());
+        for (const auto &n : std::as_const(names)) {
+            if (n.startsWith(QStringLiteral("audiorouter_stream_")))
+                toRemove.append(n);
         }
     }
     for (const auto &name : toRemove)
@@ -1125,23 +1177,52 @@ void PulseAudioBackend::sinkInputInfoCallback(pa_context * /*c*/,
 void PulseAudioBackend::moduleLoadCallback(pa_context * /*c*/,
                                            uint32_t idx, void *userdata)
 {
+    // Runs on the PA thread with the mainloop lock held.
     auto *data = static_cast<ModuleLoadData *>(userdata);
     auto *self = data->backend;
+    const QString name = data->combinedName;
+    const QStringList slaves = data->slaves;
+    delete data;
 
-    if (idx == PA_INVALID_INDEX) {
-        // Load failed — clean up the slave record that was written optimistically
-        {
-            QMutexLocker lock(&self->m_mutex);
-            self->m_combinedSlaves.remove(data->combinedName);
+    const bool failed = (idx == PA_INVALID_INDEX);
+    bool unloadIt = false;
+    bool reload = false;
+    QStringList reloadSlaves;
+    {
+        QMutexLocker lock(&self->m_mutex);
+        self->m_pendingCombined.remove(name);
+
+        const bool wanted = self->m_combinedSlaves.contains(name);
+        const bool matches = wanted && self->m_combinedSlaves.value(name) == slaves;
+
+        if (failed) {
+            // Forget the desired state so a later create call can retry
+            if (matches) self->m_combinedSlaves.remove(name);
+        } else if (matches) {
+            self->m_combinedModules[name] = idx;
+        } else {
+            // Destroyed, or wanted with other slaves, while the load was in flight
+            unloadIt = true;
         }
+
+        // Wanted with different slaves than the load that just finished?
+        if (wanted && !matches) {
+            reload = true;
+            reloadSlaves = self->m_combinedSlaves.value(name);
+            self->m_pendingCombined.insert(name, reloadSlaves);
+        }
+    }
+
+    if (failed) {
+        qWarning() << "AudioRouter: failed to load combine-sink" << name;
         QMetaObject::invokeMethod(
             self, "errorOccurred", Qt::QueuedConnection,
             Q_ARG(QString, QStringLiteral("Failed to load combined sink module")));
-    } else {
-        QMutexLocker lock(&self->m_mutex);
-        self->m_combinedModules[data->combinedName] = idx;
     }
-    delete data;
+    if (unloadIt)
+        self->unloadModuleLocked(idx);
+    if (reload)
+        self->loadCombinedLocked(name, reloadSlaves);
 }
 
 void PulseAudioBackend::successCallback(pa_context * /*c*/,

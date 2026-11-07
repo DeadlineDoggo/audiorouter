@@ -135,6 +135,9 @@ private:
     void unloadModuleLocked(uint32_t moduleIndex);
     /// Load every wanted loopback of paName that is neither loaded nor loading.
     void loadMissingLoopbacksLocked(const QString &paName);
+    /// Start a module-combine-sink load.  The caller has already recorded it
+    /// in m_pendingCombined.
+    void loadCombinedLocked(const QString &name, const QStringList &sinkNames);
 
     // ── Public-facing refresh (acquires PA lock) ────────────────────────
     void refreshSinks();
@@ -173,7 +176,8 @@ private:
     QVector<PASinkInfo>         m_sinks;
     QVector<PASinkInputInfo>    m_sinkInputs;
     QMap<QString, uint32_t>     m_combinedModules;   // name → module index
-    QMap<QString, QStringList>   m_combinedSlaves;    // name → slave sink names
+    QMap<QString, QStringList>   m_combinedSlaves;    // name → DESIRED slave sink names (absent = not wanted)
+    QMap<QString, QStringList>   m_pendingCombined;   // name → slaves of the load in flight (at most one per name)
     // Virtual sinks / loopbacks (only touched with the PA mainloop lock held)
     QMap<QString, uint32_t>     m_virtualSinkModules; // paName → module index
     QMap<QString, uint32_t>     m_loopbackModules;   // "paName|sinkName" → module index
