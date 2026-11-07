@@ -110,9 +110,7 @@ void AudioRouterApplet::applyGroup(int groupIndex)
     }
 
     for (const auto &route : group->routes)
-        m_audioBackend.applyRoute(route.sourceAppName,
-                                  route.outputSinkNames,
-                                  route.volumePercent);
+        m_audioBackend.applyRoute(route.sourceAppName, route.outputSinkNames);
 
     // Create virtual sinks and their loopbacks.  Both calls are idempotent
     // (re-applying an active room creates nothing twice), and the backend

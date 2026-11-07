@@ -67,9 +67,9 @@ public:
     void destroyCombinedSink(const QString &name);
 
     /// High-level: route an application (by name) to one or more outputs.
+    /// Streams keep their current volume.
     void applyRoute(const QString &appName,
-                    const QStringList &outputSinkNames,
-                    int volumePercent = 100);
+                    const QStringList &outputSinkNames);
     void removeRoute(const QString &appName);
 
     /// Move all streams from appName back to the default sink.
@@ -141,6 +141,7 @@ private:
     void refreshSinkInputs();
 
     /// Move collected sink-inputs to a combined sink, with retry logic.
+    /// A negative volumePercent leaves the streams' volume untouched.
     void moveSinkInputsToCombined(const QString &combinedName,
                                   const QVector<QPair<uint32_t, uint8_t>> &sinkInputs,
                                   int volumePercent,

@@ -213,8 +213,7 @@ void PulseAudioBackend::destroyCombinedSink(const QString &name)
 }
 
 void PulseAudioBackend::applyRoute(const QString &appName,
-                                   const QStringList &outputSinkNames,
-                                   int volumePercent)
+                                   const QStringList &outputSinkNames)
 {
     if (outputSinkNames.isEmpty()) return;
 
@@ -273,10 +272,8 @@ void PulseAudioBackend::applyRoute(const QString &appName,
             qWarning() << "AudioRouter: sink not found:" << outputSinkNames.first();
             return;
         }
-        for (const auto &[idx, channels] : matches) {
-            moveSinkInput(idx, targetSinkIdx);
-            setSinkInputVolume(idx, volumePercent, channels);
-        }
+        for (const auto &match : matches)
+            moveSinkInput(match.first, targetSinkIdx);
     } else {
         // Multiple outputs – filter the list to only sinks that currently exist,
         // then create a combined sink with the available subset.
@@ -312,10 +309,8 @@ void PulseAudioBackend::applyRoute(const QString &appName,
                 }
             }
             if (targetSinkIdx == PA_INVALID_INDEX) return;
-            for (const auto &[idx, channels] : matches) {
-                moveSinkInput(idx, targetSinkIdx);
-                setSinkInputVolume(idx, volumePercent, channels);
-            }
+            for (const auto &match : matches)
+                moveSinkInput(match.first, targetSinkIdx);
             return;
         }
 
@@ -329,8 +324,9 @@ void PulseAudioBackend::applyRoute(const QString &appName,
 
         // Combined sink creation is async; wait for PA to register it then move
         const auto capturedMatches = matches;
-        QTimer::singleShot(800, this, [this, capturedMatches, combinedName, volumePercent]() {
-            moveSinkInputsToCombined(combinedName, capturedMatches, volumePercent, 0);
+        // Volume -1: leave each stream at the volume the user has set
+        QTimer::singleShot(800, this, [this, capturedMatches, combinedName]() {
+            moveSinkInputsToCombined(combinedName, capturedMatches, -1, 0);
         });
     }
 }
@@ -368,7 +364,8 @@ void PulseAudioBackend::moveSinkInputsToCombined(
 
     for (const auto &[idx, channels] : sinkInputs) {
         moveSinkInput(idx, combinedSinkIdx);
-        setSinkInputVolume(idx, volumePercent, channels);
+        if (volumePercent >= 0)
+            setSinkInputVolume(idx, volumePercent, channels);
     }
 }
 
