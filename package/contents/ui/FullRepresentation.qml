@@ -2242,10 +2242,20 @@ PlasmaExtras.Representation {
         function onDataChanged(topLeft, bottomRight, roles) {
             var gm = fullRoot.groupModel
             if (!gm) return
+            // Only an activation change can move the active room; a rename or
+            // recolor of the viewed room must not pull the selection away.
+            // An empty roles list means "everything may have changed".
+            var activeRole = Qt.UserRole + 5   // GroupListModel::ActiveRole
+            var activeChanged = !roles || roles.length === 0
+            for (var r = 0; !activeChanged && r < roles.length; r++) {
+                if (roles[r] === activeRole) activeChanged = true
+            }
+            if (!activeChanged) return
             for (var i = 0; i < gm.count; i++) {
                 if (gm.isGroupActive(i) && fullRoot.selectedRoomIndex !== i) {
-                    fullRoot.selectedRoomIndex = i
-                    fullRoot.rebuildConnectionsFromModel()
+                    // selectRoom() also repoints routeModel.groupId, so the
+                    // wires shown always belong to the highlighted room.
+                    fullRoot.selectRoom(i)
                     break
                 }
             }
