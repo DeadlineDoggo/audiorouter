@@ -835,9 +835,12 @@ PlasmaExtras.Representation {
                                             icon.name: "edit-delete"
                                             onTriggered: {
                                                 if (fullRoot.groupModel) {
+                                                    // Tear down live routing, virtual sinks and loopbacks
+                                                    // first; they would otherwise outlive the room.
+                                                    if (fullRoot.groupModel.isGroupActive(index))
+                                                        Plasmoid.deactivateGroup(index)
+                                                    // Selection is fixed up in onRowsRemoved below
                                                     fullRoot.groupModel.removeGroup(index)
-                                                    if (fullRoot.selectedRoomIndex === index)
-                                                        fullRoot.selectedRoomIndex = -1
                                                 }
                                             }
                                         }
@@ -2258,6 +2261,21 @@ PlasmaExtras.Representation {
                     fullRoot.selectRoom(i)
                     break
                 }
+            }
+        }
+        // Keep selectedRoomIndex pointing at the same room after a removal
+        function onRowsRemoved(parent, first, last) {
+            var sel = fullRoot.selectedRoomIndex
+            if (sel < 0) return
+            if (sel >= first && sel <= last) {
+                // The viewed room is gone — show nothing
+                fullRoot.selectedRoomIndex = -1
+                fullRoot.addingVsink = false
+                if (fullRoot.routeModel) fullRoot.routeModel.groupId = ""
+                fullRoot.connections = []
+                fullRoot.refreshVirtualSinks()
+            } else if (sel > last) {
+                fullRoot.selectedRoomIndex = sel - (last - first + 1)
             }
         }
         // Keep selectedRoomIndex correct after drag-reorder
