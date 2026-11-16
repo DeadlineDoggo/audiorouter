@@ -1,0 +1,46 @@
+# nfpm definition: one description, three package formats (.deb, .rpm, Arch).
+# Run it through `sh packaging/build-packages.sh`; it sets NF_VERSION and unpacks
+# the installed tree (what `cmake --install` put under DESTDIR) to build/pkgroot,
+# because nfpm does not expand variables in `contents[].src`.
+#
+# SoundRoot is a compiled Plasma plugin, so a package is built once per
+# distribution family, on that family's own libraries. Plasma then finds the
+# plugin in the system plugin folder and no QT_PLUGIN_PATH is needed.
+name: soundroot
+arch: amd64
+platform: linux
+version: ${NF_VERSION}
+section: kde
+priority: optional
+maintainer: Emanuel Cisar <emanuelcisar@gmail.com>
+homepage: https://github.com/DeadlineDoggo/audiorouter
+license: GPL-2.0-or-later
+description: |
+  SoundRoot, a Plasma 6 widget that routes application audio to output devices.
+  Group applications into rooms, send each room to one or several outputs,
+  create virtual nodes and share them with other computers on the local network.
+  Works with PipeWire and PulseAudio.
+
+contents:
+  - src: build/pkgroot
+    dst: /
+    type: tree
+
+# Runtime libraries come in through plasma-workspace (Plasma, Qt and KDE
+# Frameworks); the audio client library and the encryption library are listed
+# because the plugin links to them directly.
+depends:
+  - plasma-workspace
+  - libpulse0
+  - libsodium23
+overrides:
+  rpm:
+    depends:
+      - plasma-workspace
+      - pulseaudio-libs
+      - libsodium
+  archlinux:
+    depends:
+      - plasma-workspace
+      - libpulse
+      - libsodium

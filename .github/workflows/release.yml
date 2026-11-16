@@ -1,0 +1,175 @@
+name: Release
+run-name: Release ${{ github.ref_name }}
+
+# Push a tag like v0.9.0-beta to build the packages (Arch, Debian, Fedora) and the
+# source archive and attach them to a GitHub release.
+#   vX.Y.0  full release, created as a DRAFT: read the notes, then publish by hand
+#   vX.Y.Z  (Z > 0) nightly, published at once as a pre-release
+# Started by hand (Actions -> Release -> Run workflow) it builds everything as
+# artifacts and creates no release: use it to try the pipeline.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    # Fails fast, before anything is built, when the tag and the version in
+    # package/metadata.json (shown in Plasma's widget list) disagree.
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          file=$(jq -r '.KPlugin.Version' package/metadata.json)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag=${GITHUB_REF_NAME#v}
+            if [ "$tag" != "$file" ]; then
+              echo "::error::tag v$tag does not match the version $file in package/metadata.json. Bump it first: chore: release v$tag"
+              exit 1
+            fi
+          fi
+          echo "version=$file" >> "$GITHUB_OUTPUT"
+
+  build:
+    # Built where each package format lives, on that distribution's own libraries.
+    needs: version
+    name: build (${{ matrix.id }})
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: arch
+            format: archlinux
+            image: archlinux:latest
+            setup: >-
+              pacman -Syu --noconfirm --needed
+              base-devel git cmake ninja extra-cmake-modules
+              qt6-base qt6-declarative libplasma
+              kcoreaddons kconfig kpackage kglobalaccel ki18n kxmlgui
+              libpulse libsodium
+          - id: debian
+            format: deb
+            image: debian:trixie
+            setup: >-
+              apt-get update && apt-get install -y --no-install-recommends
+              build-essential git ca-certificates cmake ninja-build pkgconf gettext extra-cmake-modules
+              qt6-base-dev qt6-declarative-dev libplasma-dev
+              libkf6coreaddons-dev libkf6config-dev libkf6package-dev libkf6globalaccel-dev
+              libkf6i18n-dev libkf6xmlgui-dev
+              libpulse-dev libsodium-dev
+          - id: fedora
+            format: rpm
+            image: fedora:latest
+            setup: >-
+              dnf install -y
+              gcc-c++ git cmake ninja-build extra-cmake-modules
+              qt6-qtbase-devel qt6-qtdeclarative-devel libplasma-devel
+              kf6-kcoreaddons-devel kf6-kconfig-devel kf6-kpackage-devel kf6-kglobalaccel-devel
+              kf6-ki18n-devel kf6-kxmlgui-devel
+              pulseaudio-libs-devel libsodium-devel
+    steps:
+      - name: Install dependencies
+        run: ${{ matrix.setup }}
+      - uses: actions/checkout@v4
+      - name: Build and run the tests
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+          cmake --build build
+          ctest --test-dir build --output-on-failure
+      - name: Install into a staging folder
+        run: |
+          DESTDIR="$PWD/stage" cmake --install build
+          tar -czf stage-${{ matrix.id }}.tar.gz -C stage .
+          # the plugin must land in the system Qt plugin folder, or Plasma will not find it
+          tar -tzf stage-${{ matrix.id }}.tar.gz | grep -E 'qt6/plugins/plasma/applets/org.kde.plasma.soundroot.so$'
+          tar -tzf stage-${{ matrix.id }}.tar.gz | grep -E 'plasmoids/org.kde.plasma.soundroot/metadata.json$'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-${{ matrix.id }}
+          path: stage-${{ matrix.id }}.tar.gz
+
+  packages:
+    # .deb, .rpm and Arch package from the staged trees (nfpm in its Docker image)
+    needs: [version, build]
+    name: package (${{ matrix.id }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: arch,   format: archlinux }
+          - { id: debian, format: deb }
+          - { id: fedora, format: rpm }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-${{ matrix.id }}
+      - name: Build the package
+        run: sh packaging/build-packages.sh "${{ needs.version.outputs.version }}" ${{ matrix.format }} stage-${{ matrix.id }}.tar.gz dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.id }}
+          path: dist/*
+
+  source:
+    # What install-local.sh builds from, for every other distribution.
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          name=soundroot-${{ needs.version.outputs.version }}
+          git archive --format=tar.gz --prefix=$name/ -o $name.tar.gz HEAD
+          git archive --format=zip    --prefix=$name/ -o $name.zip    HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source
+          path: soundroot-*
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [version, packages, source]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0               # full history and tags for the release notes
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: '{package-*,source}'     # not the staging trees
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS
+      - name: Release type and notes
+        id: kind
+        run: |
+          # vX.Y.0 = full release (a draft to review), vX.Y.Z with Z > 0 = nightly
+          ver=${GITHUB_REF_NAME#v}
+          base=${ver%%-*}
+          if [ "${base##*.}" = 0 ]; then
+            echo "full=true" >> "$GITHUB_OUTPUT"
+            echo "name=SoundRoot $ver" >> "$GITHUB_OUTPUT"
+          else
+            echo "full=false" >> "$GITHUB_OUTPUT"
+            echo "name=SoundRoot $ver (nightly)" >> "$GITHUB_OUTPUT"
+          fi
+          DIST=dist sh .github/scripts/release-notes.sh "$GITHUB_REF_NAME" > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.kind.outputs.name }}
+          body_path: RELEASE_NOTES.md
+          files: dist/*
+          draft: ${{ steps.kind.outputs.full == 'true' }}
+          prerelease: ${{ steps.kind.outputs.full != 'true' }}
+          make_latest: ${{ steps.kind.outputs.full == 'true' }}
