@@ -1,13 +1,14 @@
 #pragma once
 
 #include <QAbstractListModel>
-#include "audiobackend.h"
+#include "audiotypes.h"
 
 /**
- * @brief Exposes the list of PulseAudio sink-inputs (application audio streams) to QML.
+ * @brief Exposes the application audio streams (sink-inputs) to QML.
  *
- * These are the "source" applications the user can route to output devices.
- * Refreshes automatically when PulseAudioBackend emits sinkInputsChanged().
+ * These are the sources the user can wire to outputs.  Streams SoundRoot
+ * creates itself (network node playback) are left out.  Updates are applied
+ * row by row, so a stream appearing does not recreate the other cards.
  */
 class SinkInputModel : public QAbstractListModel {
     Q_OBJECT
@@ -23,13 +24,11 @@ public:
         VolumePercentRole
     };
 
-    explicit SinkInputModel(PulseAudioBackend *backend, QObject *parent = nullptr);
+    explicit SinkInputModel(AudioBackend *backend, QObject *parent = nullptr);
 
     int      rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
-
-    Q_INVOKABLE QString appNameAt(int row) const;
 
 signals:
     void countChanged();
@@ -38,6 +37,6 @@ public slots:
     void refresh();
 
 private:
-    PulseAudioBackend        *m_backend;
+    AudioBackend             *m_backend;
     QVector<PASinkInputInfo>  m_sinkInputs;
 };

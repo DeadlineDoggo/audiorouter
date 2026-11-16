@@ -1,10 +1,13 @@
 #include "models/sinkinputmodel.h"
+#include "models/listdiff.h"
 
-SinkInputModel::SinkInputModel(PulseAudioBackend *backend, QObject *parent)
+#include <algorithm>
+
+SinkInputModel::SinkInputModel(AudioBackend *backend, QObject *parent)
     : QAbstractListModel(parent)
     , m_backend(backend)
 {
-    connect(backend, &PulseAudioBackend::sinkInputsChanged,
+    connect(backend, &AudioBackend::sinkInputsChanged,
             this, &SinkInputModel::refresh);
 }
 
@@ -43,45 +46,41 @@ QHash<int, QByteArray> SinkInputModel::roleNames() const
     };
 }
 
-QString SinkInputModel::appNameAt(int row) const
-{
-    if (row < 0 || row >= m_sinkInputs.size()) return {};
-    return m_sinkInputs[row].appName;
-}
-
 void SinkInputModel::refresh()
 {
-    auto newInputs = m_backend->availableSinkInputs();
-
-    // Fast path: same count, same entries → check for property-only changes
-    if (newInputs.size() == m_sinkInputs.size()) {
-        bool structurallyEqual = true;
-        for (int i = 0; i < newInputs.size(); ++i) {
-            if (newInputs[i].index != m_sinkInputs[i].index ||
-                newInputs[i].appName != m_sinkInputs[i].appName) {
-                structurallyEqual = false;
-                break;
-            }
-        }
-        if (structurallyEqual) {
-            // Only emit dataChanged for rows whose properties changed
-            for (int i = 0; i < newInputs.size(); ++i) {
-                const auto &o = m_sinkInputs[i];
-                const auto &n = newInputs[i];
-                if (o.sinkIndex != n.sinkIndex || o.mediaName != n.mediaName ||
-                    o.iconName != n.iconName || o.volumePercent != n.volumePercent) {
-                    m_sinkInputs[i] = n;
-                    emit dataChanged(index(i), index(i));
-                }
-            }
-            // Don't emit countChanged — count didn't change
-            return;
-        }
+    QVector<PASinkInputInfo> updated;
+    const auto all = m_backend->availableSinkInputs();
+    for (const auto &si : all) {
+        if (si.netNode.isEmpty())   // our own network playback streams are not apps
+            updated.append(si);
     }
 
-    // Structural change — full reset
-    beginResetModel();
-    m_sinkInputs = std::move(newInputs);
-    endResetModel();
-    emit countChanged();
+    // Streams of one application next to each other, oldest first: a stable
+    // order, whatever order the server happens to list them in.
+    std::sort(updated.begin(), updated.end(),
+              [](const PASinkInputInfo &a, const PASinkInputInfo &b) {
+                  const int byName = a.appName.compare(b.appName, Qt::CaseInsensitive);
+                  return byName != 0 ? byName < 0 : a.index < b.index;
+              });
+
+    const ListDiffOps ops {
+        [this](int row) { beginInsertRows({}, row, row); },
+        [this]() { endInsertRows(); },
+        [this](int row) { beginRemoveRows({}, row, row); },
+        [this]() { endRemoveRows(); },
+        [this]() { beginResetModel(); },
+        [this]() { endResetModel(); },
+        [this](int row) { emit dataChanged(index(row), index(row)); },
+    };
+    const bool structural = applyListDiff(
+        m_sinkInputs, updated,
+        [](const PASinkInputInfo &a, const PASinkInputInfo &b) { return a.index == b.index; },
+        [](const PASinkInputInfo &a, const PASinkInputInfo &b) {
+            return a.appName == b.appName && a.mediaName == b.mediaName &&
+                   a.sinkIndex == b.sinkIndex && a.iconName == b.iconName &&
+                   a.volumePercent == b.volumePercent && a.channels == b.channels;
+        },
+        ops);
+    if (structural)
+        emit countChanged();
 }

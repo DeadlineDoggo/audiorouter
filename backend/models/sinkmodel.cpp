@@ -1,10 +1,11 @@
 #include "models/sinkmodel.h"
+#include "models/listdiff.h"
 
-SinkModel::SinkModel(PulseAudioBackend *backend, QObject *parent)
+SinkModel::SinkModel(AudioBackend *backend, QObject *parent)
     : QAbstractListModel(parent)
     , m_backend(backend)
 {
-    connect(backend, &PulseAudioBackend::sinksChanged,
+    connect(backend, &AudioBackend::sinksChanged,
             this, &SinkModel::refresh);
 }
 
@@ -25,7 +26,7 @@ QVariant SinkModel::data(const QModelIndex &index, int role) const
     case DescriptionRole: return sink.description;
     case VolumeRole:      return sink.volumePercent;
     case MutedRole:       return sink.isMuted;
-    case IsVirtualRole:   return sink.name.startsWith(QStringLiteral("soundroot_virt_"));
+    case IsDefaultRole:   return sink.name == m_defaultSink;
     case Qt::DisplayRole: return sink.description;
     }
     return {};
@@ -35,63 +36,47 @@ QHash<int, QByteArray> SinkModel::roleNames() const
 {
     return {
         { IndexRole,       "sinkIndex"         },
-        { NameRole,        "sinkName"           },
+        { NameRole,        "sinkName"          },
         { DescriptionRole, "sinkDescription"   },
         { VolumeRole,      "sinkVolumePercent" },
-        { MutedRole,        "sinkMuted"         },
-        { IsVirtualRole,    "isVirtual"         }
+        { MutedRole,       "sinkMuted"         },
+        { IsDefaultRole,   "isDefault"         }
     };
-}
-
-QString SinkModel::sinkNameAt(int row) const
-{
-    if (row < 0 || row >= m_sinks.size()) return {};
-    return m_sinks[row].name;
-}
-
-QString SinkModel::sinkDescriptionAt(int row) const
-{
-    if (row < 0 || row >= m_sinks.size()) return {};
-    return m_sinks[row].description;
 }
 
 void SinkModel::refresh()
 {
-    auto rawSinks = m_backend->availableSinks();
-    // Strip internal combine sinks from the display list; they stay in the
-    // backend's m_sinks so routing lookups can still find them.
-    QVector<PASinkInfo> newSinks;
-    for (const auto &s : rawSinks) {
-        if (!s.name.startsWith(QStringLiteral("audiorouter_")))
-            newSinks.append(s);
+    QVector<PASinkInfo> updated;
+    const auto all = m_backend->availableSinks();
+    for (const auto &s : all) {
+        if (!isInternalSinkName(s.name))
+            updated.append(s);
     }
 
-    // Fast path: same count, same sinks → check for property-only changes
-    if (newSinks.size() == m_sinks.size()) {
-        bool structurallyEqual = true;
-        for (int i = 0; i < newSinks.size(); ++i) {
-            if (newSinks[i].index != m_sinks[i].index ||
-                newSinks[i].name  != m_sinks[i].name) {
-                structurallyEqual = false;
-                break;
-            }
-        }
-        if (structurallyEqual) {
-            for (int i = 0; i < newSinks.size(); ++i) {
-                const auto &o = m_sinks[i];
-                const auto &n = newSinks[i];
-                if (o.volumePercent != n.volumePercent || o.isMuted != n.isMuted ||
-                    o.description != n.description) {
-                    m_sinks[i] = n;
-                    emit dataChanged(index(i), index(i));
-                }
-            }
-            return;
-        }
-    }
+    const QString newDefault = m_backend->defaultSinkName();
+    const bool defaultChanged = newDefault != m_defaultSink;
+    m_defaultSink = newDefault;
 
-    // Structural change — full reset
-    beginResetModel();
-    m_sinks = std::move(newSinks);
-    endResetModel();
+    const ListDiffOps ops {
+        [this](int row) { beginInsertRows({}, row, row); },
+        [this]() { endInsertRows(); },
+        [this](int row) { beginRemoveRows({}, row, row); },
+        [this]() { endRemoveRows(); },
+        [this]() { beginResetModel(); },
+        [this]() { endResetModel(); },
+        [this](int row) { emit dataChanged(index(row), index(row)); },
+    };
+    const bool structural = applyListDiff(
+        m_sinks, updated,
+        [](const PASinkInfo &a, const PASinkInfo &b) { return a.name == b.name; },
+        [](const PASinkInfo &a, const PASinkInfo &b) {
+            return a.index == b.index && a.description == b.description &&
+                   a.volumePercent == b.volumePercent && a.isMuted == b.isMuted &&
+                   a.channels == b.channels;
+        },
+        ops);
+    if (structural)
+        emit countChanged();
+    if (defaultChanged && !m_sinks.isEmpty())
+        emit dataChanged(index(0), index(static_cast<int>(m_sinks.size()) - 1), { IsDefaultRole });
 }
