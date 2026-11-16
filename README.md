@@ -4,7 +4,8 @@
 
 SoundRoot is a KDE Plasma 6 plasmoid that lets you create audio "rooms" — named groups of source-to-sink connections — and switch between them instantly with keyboard shortcuts or a click.
 
-![Version](https://img.shields.io/badge/version-0.8.1--beta-orange)
+![CI](https://github.com/DeadlineDoggo/audiorouter/actions/workflows/ci.yml/badge.svg)
+![Version](https://img.shields.io/github/v/release/DeadlineDoggo/audiorouter?include_prereleases&color=orange&cacheSeconds=600)
 ![License](https://img.shields.io/badge/license-GPL--2.0--or--later-blue)
 ![Plasma](https://img.shields.io/badge/KDE%20Plasma-6.0%2B-informational)
 ![PipeWire](https://img.shields.io/badge/PipeWire-compatible-green)
@@ -36,7 +37,19 @@ Install directly from the [KDE Store](https://store.kde.org/p/2357238/) via Plas
 # Search for SoundRoot in Discover / Add Widgets → Get New…
 ```
 
-### GitHub Releases
+### Packages (Arch, Debian, Fedora)
+
+Download the package for your distribution from [Releases](https://github.com/DeadlineDoggo/audiorouter/releases). It installs where Plasma looks for plugins, so nothing else has to be set up:
+
+```bash
+sudo pacman -U soundroot-*.pkg.tar.zst   # Arch Linux
+sudo apt install ./soundroot_*.deb       # Debian 13 and systems with the same Plasma and Qt
+sudo dnf install ./soundroot-*.rpm       # Fedora
+```
+
+Then restart Plasma (or log out and in) and add the widget as below.
+
+### Source archive (any other distribution)
 
 Download `soundroot-*.tar.gz` from [Releases](https://github.com/DeadlineDoggo/audiorouter/releases), extract, and run:
 
