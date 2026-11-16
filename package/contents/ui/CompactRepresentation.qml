@@ -5,7 +5,8 @@ import org.kde.plasma.plasmoid
 
 /**
  * Compact representation: the icon shown in the Plasma panel.
- * Clicking it toggles the full representation popup.
+ * Clicking it toggles the full representation popup.  A dot in the colour of
+ * the active room shows at a glance which room is on.
  */
 MouseArea {
     id: compactRoot
@@ -21,43 +22,24 @@ MouseArea {
     onPressed: wasExpanded = root.expanded
     onClicked: root.expanded = !wasExpanded
 
-    property string activeColor: ""
-
-    function refreshActiveColor() {
+    // root.activeRoomRow changes whenever a room is switched on or off
+    readonly property string activeColor: {
         var gm = Plasmoid.groupModel
-        if (!gm) { activeColor = ""; return }
-        for (var i = 0; i < gm.count; i++) {
-            if (gm.isGroupActive(i)) {
-                activeColor = gm.data(gm.index(i, 0), Qt.UserRole + 3)  // ColorRole
-                return
-            }
-        }
-        activeColor = ""
-    }
-
-    Component.onCompleted: refreshActiveColor()
-
-    Connections {
-        target: Plasmoid.groupModel
-        function onDataChanged(topLeft, bottomRight, roles) { compactRoot.refreshActiveColor() }
-        function onModelReset() { compactRoot.refreshActiveColor() }
-        function onRowsInserted(parent, first, last) { compactRoot.refreshActiveColor() }
-        function onRowsRemoved(parent, first, last) { compactRoot.refreshActiveColor() }
+        return gm && root.activeRoomRow >= 0 ? gm.groupColor(root.activeRoomRow) : ""
     }
 
     Image {
-        id: icon
         anchors.fill: parent
         source: "icon.png"
         sourceSize: Qt.size(parent.width, parent.height)
+        fillMode: Image.PreserveAspectFit
         smooth: true
     }
 
     // Active room color indicator dot (top-right corner)
     Rectangle {
-        id: activeRoomDot
-        width: Math.round(parent.width * 0.38)
-        height: Math.round(parent.height * 0.38)
+        width: Math.round(Math.min(parent.width, parent.height) * 0.38)
+        height: width
         radius: width / 2
         anchors.top: parent.top
         anchors.right: parent.right

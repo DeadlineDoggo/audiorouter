@@ -2,11 +2,18 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import org.kde.kquickcontrols as KQuickControls
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.plasma.extras as PlasmaExtras
 import org.kde.plasma.plasmoid
 
+/**
+ * The popup: rooms on the left, the selected room's routing board on the
+ * right.
+ *
+ * All routing state lives in the C++ engine.  This file only keeps what is
+ * purely a matter of presentation: which room is being looked at, and which
+ * colour each wire is drawn in.
+ */
 PlasmaExtras.Representation {
     id: fullRoot
 
@@ -16,2327 +23,387 @@ PlasmaExtras.Representation {
     Layout.minimumHeight:   Kirigami.Units.gridUnit * 28
 
     readonly property var groupModel: Plasmoid.groupModel ?? null
-    readonly property var routeModel: Plasmoid.routeModel ?? null
-    readonly property var sinkModel: Plasmoid.sinkModel ?? null
-    readonly property var sinkInputModel: Plasmoid.sinkInputModel ?? null
-
-    property int selectedRoomIndex: -1
-
-    // ── Room edit mode ──────────────────────────────────────────────
-    property int editingRoomIndex: -1   // -1 = create mode, >= 0 = editing that row
-
-    // ── Connection management ───────────────────────────────────────
-    // Each link is { from: "type:name", to: "type:name", color: "#hex" }
-    // type is "app" or "sink"
-    property var connections: []
-    property int nextColorIdx: 0
-
-    // Drag state
-    property bool isDragging: false
-    property string dragFrom: ""     // "app:Firefox" or "sink:sinkName"
-    property real dragStartX: 0
-    property real dragStartY: 0
-    property real dragEndX: 0
-    property real dragEndY: 0
-    property int hoveredConnectionIdx: -1
-    // masterVolume is the raw PA default-sink volume. readonly — never assigned manually.
     readonly property int masterVolume: Plasmoid.masterVolume ?? 100
-    property bool scrollSyncing: false
 
-    // Virtual sinks for the selected room
-    property var virtualSinksList: []
-    property bool addingVsink: false
+    // ── Which room is shown ─────────────────────────────────────────
+    // Tracked by id: rows shift when rooms are reordered or removed.
+    property string selectedRoomId: ""
+    property int selectedRoomIndex: -1
+    property bool selectedRoomActive: false
+    property int activeRow: -1
 
-    function refreshVirtualSinks() {
-        if (fullRoot.selectedRoomIndex >= 0)
-            virtualSinksList = Plasmoid.groupVirtualSinks(fullRoot.selectedRoomIndex)
-        else
-            virtualSinksList = []
-        connectionCanvas.requestPaint()
+    function selectRoom(row) {
+        if (!groupModel || row < 0 || row >= groupModel.count) {
+            selectedRoomId = ""
+            selectedRoomIndex = -1
+        } else {
+            if (groupModel.groupId(row) !== selectedRoomId)
+                wireColors = ({})          // another room: colours start afresh
+            selectedRoomId = groupModel.groupId(row)
+            selectedRoomIndex = row
+        }
+        board.cancelDrag()
+        board.addingNode = false
+        refreshRoomState()
+        refreshVirtualNodes()
+        refreshWires()
     }
 
-    readonly property var linkColors: ["#4a90d9", "#50c878", "#e74c3c", "#f39c12", "#9b59b6",
-                                       "#1abc9c", "#e67e22", "#2ecc71", "#3498db", "#e91e63"]
-
-    function selectRoom(idx) {
-        selectedRoomIndex = idx
-        addingVsink = false
-        if (fullRoot.routeModel && fullRoot.groupModel) {
-            fullRoot.routeModel.groupId = fullRoot.groupModel.groupId(idx)
+    /// Find the selected room again after rows were added, moved or removed.
+    function syncSelection() {
+        if (!groupModel) return
+        var row = -1
+        for (var i = 0; i < groupModel.count; i++) {
+            if (groupModel.groupId(i) === selectedRoomId) { row = i; break }
         }
-        rebuildConnectionsFromModel()
-        refreshVirtualSinks()
-    }
-
-    function activateRoomAt(idx) {
-        if (!fullRoot.groupModel) return
-        Plasmoid.applyGroup(idx)   // C++ enforces single-room + sets active state
-        fullRoot.selectRoom(idx)   // Rebuilds per-stream connections from saved routes
-        applyPerStreamRouting()    // Apply exact per-stream moves
-    }
-
-    function selectNextRoom() {
-        if (!fullRoot.groupModel || fullRoot.groupModel.count === 0) return
-        var n = fullRoot.groupModel.count
-        var next = selectedRoomIndex < 0 ? 0 : (selectedRoomIndex + 1) % n
-        activateRoomAt(next)
-    }
-
-    function selectPrevRoom() {
-        if (!fullRoot.groupModel || fullRoot.groupModel.count === 0) return
-        var n = fullRoot.groupModel.count
-        var prev = selectedRoomIndex < 0 ? n - 1 : (selectedRoomIndex - 1 + n) % n
-        activateRoomAt(prev)
-    }
-
-    function getNodeKey(type, name) {
-        return type + ":" + name
-    }
-
-    function pickColor() {
-        var c = linkColors[nextColorIdx % linkColors.length]
-        nextColorIdx++
-        return c
-    }
-
-    // Hit-test: find which node card is at position (mx, my) in connectionArea
-    function findNodeAt(mx, my) {
-        for (var i = 0; i < appListView.count; i++) {
-            var appItem = appListView.itemAtIndex(i)
-            if (!appItem) continue
-            var ap = appItem.mapToItem(connectionArea, 0, 0)
-            if (mx >= ap.x && mx <= ap.x + appItem.width &&
-                my >= ap.y && my <= ap.y + appItem.height)
-                return appItem.nodeKey
-        }
-        for (var j = 0; j < outListView.count; j++) {
-            var sinkItem = outListView.itemAtIndex(j)
-            if (!sinkItem) continue
-            var sp = sinkItem.mapToItem(connectionArea, 0, 0)
-            if (mx >= sp.x && mx <= sp.x + sinkItem.width &&
-                my >= sp.y && my <= sp.y + sinkItem.height)
-                return sinkItem.nodeKey
-        }
-        for (var v = 0; v < vsinkRepeater.count; v++) {
-            var vsItem = vsinkRepeater.itemAt(v)
-            if (!vsItem) continue
-            var vp = vsItem.mapToItem(connectionArea, 0, 0)
-            if (mx >= vp.x && mx <= vp.x + vsItem.width &&
-                my >= vp.y && my <= vp.y + vsItem.height) {
-                // Choose left (in) or right (out) side based on cursor position
-                var midX = vp.x + vsItem.width / 2
-                return mx < midX ? vsItem.nodeKeyIn : vsItem.nodeKeyOut
-            }
-        }
-        return ""
-    }
-
-    // Find which "group color" a node belongs to (follow connection chain)
-    function findGroupColor(nodeKey) {
-        for (var i = 0; i < connections.length; i++) {
-            if (connections[i].from === nodeKey || connections[i].to === nodeKey)
-                return connections[i].color
-        }
-        return ""
-    }
-
-    // Check if two nodes are already in the same connection chain
-    function areConnected(a, b) {
-        // BFS through connections
-        var visited = {}
-        var queue = [a]
-        visited[a] = true
-        while (queue.length > 0) {
-            var cur = queue.shift()
-            if (cur === b) return true
-            for (var i = 0; i < connections.length; i++) {
-                var c = connections[i]
-                var next = ""
-                if (c.from === cur) next = c.to
-                else if (c.to === cur) next = c.from
-                if (next !== "" && !visited[next]) {
-                    visited[next] = true
-                    queue.push(next)
-                }
-            }
-        }
-        return false
-    }
-
-    // Get the group color for a connected component (or pick new one).
-    // Prefers the sink's established color so all wires to the same sink share one color.
-    function getGroupColorForLink(fromKey, toKey) {
-        var sinkKey = toKey.indexOf("sink:") === 0 ? toKey
-                    : fromKey.indexOf("sink:") === 0 ? fromKey : ""
-        if (sinkKey !== "") {
-            var sc = findGroupColor(sinkKey)
-            if (sc !== "") return sc
-        }
-        var srcKey = sinkKey === toKey ? fromKey : toKey
-        var ic = findGroupColor(srcKey)
-        if (ic !== "") return ic
-        return pickColor()
-    }
-
-    // Look up appName + mediaName for a live input: node key
-    function streamMetaForKey(nodeKey) {
-        if (nodeKey.indexOf("input:") !== 0) return {appName: "", mediaName: ""}
-        var inputIdx = parseInt(nodeKey.substring(6))
-        if (!fullRoot.sinkInputModel) return {appName: "", mediaName: ""}
-        for (var i = 0; i < fullRoot.sinkInputModel.count; i++) {
-            var iidx = fullRoot.sinkInputModel.index(i, 0)
-            if (fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 1) === inputIdx)
-                return {
-                    appName:   fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 2),
-                    mediaName: fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 3)
-                }
-        }
-        return {appName: "", mediaName: ""}
-    }
-
-    function addConnection(fromKey, toKey) {
-        if (fromKey === toKey) return
-        // Don't duplicate
-        for (var i = 0; i < connections.length; i++) {
-            var c = connections[i]
-            if ((c.from === fromKey && c.to === toKey) ||
-                (c.from === toKey && c.to === fromKey))
-                return
-        }
-        // Merge colors: if they're in different groups, unify to same color
-        var color = getGroupColorForLink(fromKey, toKey)
-        // Unify: set all connections in both components to same color
-        var oldColors = {}
-        var c1 = findGroupColor(fromKey)
-        var c2 = findGroupColor(toKey)
-        if (c1 !== "" && c1 !== color) oldColors[c1] = true
-        if (c2 !== "" && c2 !== color) oldColors[c2] = true
-
-        var newConns = connections.slice()
-        for (var j = 0; j < newConns.length; j++) {
-            if (oldColors[newConns[j].color])
-                newConns[j] = { from: newConns[j].from, to: newConns[j].to, color: color,
-                                appName: newConns[j].appName || "", mediaName: newConns[j].mediaName || "" }
-        }
-        // Determine which key is the input side and attach stream metadata
-        var inputKey = (fromKey.indexOf("input:") === 0) ? fromKey : toKey
-        var meta = streamMetaForKey(inputKey)
-        newConns.push({ from: fromKey, to: toKey, color: color,
-                        appName: meta.appName, mediaName: meta.mediaName })
-        connections = newConns
-        syncConnectionsToModel()
-        connectionCanvas.requestPaint()
-    }
-
-    function removeConnection(idx) {
-        var newConns = connections.slice()
-        newConns.splice(idx, 1)
-        connections = newConns
-        syncConnectionsToModel()
-        connectionCanvas.requestPaint()
-    }
-
-    function removeAllConnectionsFor(nodeKey) {
-        var newConns = []
-        for (var i = 0; i < connections.length; i++) {
-            if (connections[i].from !== nodeKey && connections[i].to !== nodeKey)
-                newConns.push(connections[i])
-        }
-        connections = newConns
-        syncConnectionsToModel()
-        connectionCanvas.requestPaint()
-    }
-
-    // Sync QML connections array → C++ routeModel only.
-    // Live PA routing only happens when the room is explicitly activated.
-    function syncConnectionsToModel() {
-        if (!fullRoot.routeModel) return
-
-        // ── Virtual sink loopback targets ─────────────────────────────────
-        // Collect vsinkout → sink connections and persist them on the group
-        var vsinkLoopbacks = {}  // paName → [realSinkName, ...]
-        for (var lc = 0; lc < connections.length; lc++) {
-            var lconn = connections[lc]
-            var vpaFrom = "", rSinkTo = ""
-            if (lconn.from.indexOf("vsinkout:") === 0 && lconn.to.indexOf("sink:") === 0) {
-                vpaFrom = lconn.from.substring(9); rSinkTo = lconn.to.substring(5)
-            } else if (lconn.from.indexOf("sink:") === 0 && lconn.to.indexOf("vsinkout:") === 0) {
-                vpaFrom = lconn.to.substring(9); rSinkTo = lconn.from.substring(5)
-            }
-            if (vpaFrom !== "") {
-                if (!vsinkLoopbacks[vpaFrom]) vsinkLoopbacks[vpaFrom] = []
-                if (vsinkLoopbacks[vpaFrom].indexOf(rSinkTo) < 0) vsinkLoopbacks[vpaFrom].push(rSinkTo)
-            }
-        }
-        // Ensure vsinks with no connections also get their targets cleared
-        for (var vli = 0; vli < fullRoot.virtualSinksList.length; vli++) {
-            var vpaName = fullRoot.virtualSinksList[vli].paName
-            if (!(vpaName in vsinkLoopbacks)) vsinkLoopbacks[vpaName] = []
-        }
-        for (var vpa in vsinkLoopbacks)
-            Plasmoid.setVirtualSinkLoopbackTargets(fullRoot.selectedRoomIndex, vpa, vsinkLoopbacks[vpa])
-
-        // Build ordinal map: inputIndex → { appName, ordinal }
-        // Ordinal = order of appearance among same-app streams
-        var appOrdCounters = {}
-        var streamInfo = {} // inputIndex → { appName, ordinal }
-        if (fullRoot.sinkInputModel) {
-            for (var s = 0; s < fullRoot.sinkInputModel.count; s++) {
-                var sidx = fullRoot.sinkInputModel.index(s, 0)
-                var sInputIdx = fullRoot.sinkInputModel.data(sidx, Qt.UserRole + 1)
-                var sAppName  = fullRoot.sinkInputModel.data(sidx, Qt.UserRole + 2)
-                if (!(sAppName in appOrdCounters)) appOrdCounters[sAppName] = 0
-                streamInfo[sInputIdx] = { appName: sAppName, ordinal: appOrdCounters[sAppName] }
-                appOrdCounters[sAppName]++
-            }
-        }
-
-        // Build per-stream routes: "appName\tordinal" → [sinkNames]
-        var streamRoutes = {}
-
-        for (var i = 0; i < connections.length; i++) {
-            var c = connections[i]
-            var inputKey = ""
-            var sinkKey = ""
-
-            if (c.from.indexOf("input:") === 0 && c.to.indexOf("sink:") === 0) {
-                inputKey = c.from; sinkKey = c.to
-            } else if (c.from.indexOf("sink:") === 0 && c.to.indexOf("input:") === 0) {
-                sinkKey = c.from; inputKey = c.to
-            } else if (c.from.indexOf("input:") === 0 && c.to.indexOf("vsinkin:") === 0) {
-                // Treat virtual sink input side as a real sink for routing
-                inputKey = c.from; sinkKey = "sink:" + c.to.substring(8)
-            } else if (c.from.indexOf("vsinkin:") === 0 && c.to.indexOf("input:") === 0) {
-                sinkKey = "sink:" + c.from.substring(8); inputKey = c.to
-            } else if (c.from.indexOf("app:") === 0 && c.to.indexOf("sink:") === 0) {
-                var legKey = c.from.substring(4) + "\t0"
-                var legSink = c.to.substring(5)
-                if (!streamRoutes[legKey]) streamRoutes[legKey] = []
-                if (streamRoutes[legKey].indexOf(legSink) < 0) streamRoutes[legKey].push(legSink)
-                continue
-            } else if (c.from.indexOf("sink:") === 0 && c.to.indexOf("app:") === 0) {
-                var legKey2 = c.to.substring(4) + "\t0"
-                var legSink2 = c.from.substring(5)
-                if (!streamRoutes[legKey2]) streamRoutes[legKey2] = []
-                if (streamRoutes[legKey2].indexOf(legSink2) < 0) streamRoutes[legKey2].push(legSink2)
-                continue
-            } else {
-                continue
-            }
-
-            var inputIdx = parseInt(inputKey.substring(6))
-            var sinkName = sinkKey.substring(5)
-            var info = streamInfo[inputIdx]
-            if (!info) continue
-
-            var routeKey = info.appName + "\t" + info.ordinal
-            if (!streamRoutes[routeKey]) streamRoutes[routeKey] = []
-            if (streamRoutes[routeKey].indexOf(sinkName) < 0) streamRoutes[routeKey].push(sinkName)
-        }
-
-        // Persist routes to model
-        while (fullRoot.routeModel.count > 0)
-            fullRoot.routeModel.removeRoute(0)
-        for (var key in streamRoutes)
-            fullRoot.routeModel.addRoute(key, streamRoutes[key])
-
-        // If this room is already active, do per-stream routing directly
-        if (fullRoot.selectedRoomIndex >= 0 && fullRoot.groupModel &&
-                fullRoot.groupModel.isGroupActive(fullRoot.selectedRoomIndex)) {
-            applyPerStreamRouting()
+        if (row >= 0 && selectedRoomId !== "") {
+            selectedRoomIndex = row
+            refreshRoomState()
+        } else {
+            // It is gone (or nothing was selected): show the active room,
+            // or the first one
+            var active = Plasmoid.activeRoom()
+            selectRoom(active >= 0 ? active : (groupModel.count > 0 ? 0 : -1))
         }
     }
 
-    // Apply per-stream routing from current connections array.
-    // Collects all sinks per input, then uses routeStreamToSinks which
-    // creates combine-sinks when a stream targets multiple outputs.
-    function applyPerStreamRouting() {
-        var inputSinks = {} // inputIdx → [sinkName, ...]
-        for (var k = 0; k < connections.length; k++) {
-            var conn = connections[k]
-            var iKey = "", sKey = ""
-            if (conn.from.indexOf("input:") === 0 && conn.to.indexOf("sink:") === 0) {
-                iKey = conn.from; sKey = conn.to
-            } else if (conn.from.indexOf("sink:") === 0 && conn.to.indexOf("input:") === 0) {
-                sKey = conn.from; iKey = conn.to
-            } else if (conn.from.indexOf("input:") === 0 && conn.to.indexOf("vsinkin:") === 0) {
-                // Virtual sink input side is a real PA sink for routing
-                iKey = conn.from; sKey = "sink:" + conn.to.substring(8)
-            } else if (conn.from.indexOf("vsinkin:") === 0 && conn.to.indexOf("input:") === 0) {
-                sKey = "sink:" + conn.from.substring(8); iKey = conn.to
-            }
-            if (iKey !== "" && sKey !== "") {
-                var idx = parseInt(iKey.substring(6))
-                var sink = sKey.substring(5)
-                if (!inputSinks[idx]) inputSinks[idx] = []
-                if (inputSinks[idx].indexOf(sink) < 0) inputSinks[idx].push(sink)
-            }
-        }
-
-        for (var inputIdx in inputSinks) {
-            Plasmoid.routeStreamToSinks(parseInt(inputIdx), inputSinks[inputIdx])
-        }
+    function refreshRoomState() {
+        activeRow = Plasmoid.activeRoom()
+        selectedRoomActive = selectedRoomIndex >= 0 && activeRow === selectedRoomIndex
     }
 
-    // Rebuild connections from current routeModel, matching saved per-stream
-    // routes (appName\tordinal) to currently running streams by ordinal.
-    function rebuildConnectionsFromModel() {
-        if (!fullRoot.routeModel) return
-        var newConns = []
-        nextColorIdx = 0
+    // ── What the board shows ────────────────────────────────────────
+    property var wires: []
+    property var nodeColors: ({})
+    property var ghostSources: []
+    property var ghostSinks: []
+    property var virtualNodes: []
 
-        // Build ordinal map for current live streams
-        var appStreams = {} // appName → [inputIdx, inputIdx, ...]  in model order
-        if (fullRoot.sinkInputModel) {
-            for (var j = 0; j < fullRoot.sinkInputModel.count; j++) {
-                var iidx = fullRoot.sinkInputModel.index(j, 0)
-                var inputIdx = fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 1)
-                var inputApp = fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 2)
-                if (!appStreams[inputApp]) appStreams[inputApp] = []
-                appStreams[inputApp].push(inputIdx)
+    readonly property var wirePalette: ["#4a90d9", "#50c878", "#e74c3c", "#f39c12", "#9b59b6",
+                                    "#1abc9c", "#e67e22", "#2ecc71", "#3498db", "#e91e63"]
+    /// target node key → colour.  Kept while a room is shown, so adding or
+    /// removing one wire does not recolour all the others.
+    property var wireColors: ({})
+
+    function sameData(a, b) { return JSON.stringify(a) === JSON.stringify(b) }
+
+    function refreshWires() {
+        var raw = selectedRoomIndex >= 0 ? Plasmoid.roomConnections(selectedRoomIndex) : []
+
+        // One colour per target: all wires into the same output look alike
+        var colors = wireColors
+        var inUse = {}
+        for (var i = 0; i < raw.length; i++) inUse[raw[i].to] = true
+        for (var key in colors) {
+            if (!inUse[key]) delete colors[key]     // free it for reuse
+        }
+        function pickColor() {
+            var taken = {}
+            for (var k in colors) taken[colors[k]] = true
+            for (var p = 0; p < wirePalette.length; p++) {
+                if (!taken[wirePalette[p]]) return wirePalette[p]
             }
+            return wirePalette[Object.keys(colors).length % wirePalette.length]
         }
 
-        var sinkColorMap = {}
-        for (var i = 0; i < fullRoot.routeModel.count; i++) {
-            var ridx = fullRoot.routeModel.index(i, 0)
-            var sourceKey   = fullRoot.routeModel.data(ridx, Qt.UserRole + 1) // SourceAppRole
-            var outputNames = fullRoot.routeModel.data(ridx, Qt.UserRole + 2) // OutputNamesRole
-            if (!outputNames || !outputNames.length) continue
-
-            // Parse "appName\tordinal" or legacy plain "appName"
-            var tabPos = sourceKey.indexOf("\t")
-            var baseAppName = tabPos >= 0 ? sourceKey.substring(0, tabPos) : sourceKey
-            var ordinal     = tabPos >= 0 ? parseInt(sourceKey.substring(tabPos + 1)) : -1
-
-            var streams = appStreams[baseAppName] || []
-
-            if (ordinal >= 0 && ordinal < streams.length) {
-                // Per-stream route: connect this specific stream
-                var fromKey = "input:" + streams[ordinal]
-                var meta = streamMetaForKey(fromKey)
-                for (var k = 0; k < outputNames.length; k++) {
-                    var rName = outputNames[k]
-                    var sk = rName.startsWith("soundroot_virt_")
-                        ? "vsinkin:" + rName : "sink:" + rName
-                    if (!sinkColorMap[sk]) sinkColorMap[sk] = pickColor()
-                    newConns.push({ from: fromKey, to: sk, color: sinkColorMap[sk],
-                                    appName: meta.appName, mediaName: meta.mediaName })
-                }
-            } else if (ordinal < 0 && streams.length > 0) {
-                // Legacy route (no ordinal): connect ALL streams of this app
-                for (var j2 = 0; j2 < streams.length; j2++) {
-                    var fk2 = "input:" + streams[j2]
-                    var meta2 = streamMetaForKey(fk2)
-                    for (var k2 = 0; k2 < outputNames.length; k2++) {
-                        var rName2 = outputNames[k2]
-                        var sk2 = rName2.startsWith("soundroot_virt_")
-                            ? "vsinkin:" + rName2 : "sink:" + rName2
-                        if (!sinkColorMap[sk2]) sinkColorMap[sk2] = pickColor()
-                        newConns.push({ from: fk2, to: sk2, color: sinkColorMap[sk2],
-                                        appName: meta2.appName, mediaName: meta2.mediaName })
-                    }
-                }
-            } else {
-                // Stream not currently available — store as app: placeholder
-                for (var k3 = 0; k3 < outputNames.length; k3++) {
-                    var rName3 = outputNames[k3]
-                    var sk3 = rName3.startsWith("soundroot_virt_")
-                        ? "vsinkin:" + rName3 : "sink:" + rName3
-                    if (!sinkColorMap[sk3]) sinkColorMap[sk3] = pickColor()
-                    newConns.push({ from: "app:" + baseAppName, to: sk3, color: sinkColorMap[sk3],
-                                    appName: baseAppName, mediaName: "" })
-                }
-            }
-        }
-        connections = newConns
-
-        // Restore vsinkout → realSink connections from saved loopback targets
-        if (fullRoot.selectedRoomIndex >= 0) {
-            var vsData = Plasmoid.groupVirtualSinks(fullRoot.selectedRoomIndex)
-            for (var vsi = 0; vsi < vsData.length; vsi++) {
-                var vs = vsData[vsi]
-                var vsOutKey = "vsinkout:" + vs.paName
-                var ltargets = vs.loopbackTargets || []
-                for (var lti = 0; lti < ltargets.length; lti++) {
-                    var rsk = "sink:" + ltargets[lti]
-                    if (!sinkColorMap[rsk]) sinkColorMap[rsk] = pickColor()
-                    newConns.push({ from: vsOutKey, to: rsk, color: sinkColorMap[rsk],
-                                    appName: "", mediaName: "" })
-                }
-            }
-            connections = newConns
+        var list = []
+        var perNode = {}
+        for (var j = 0; j < raw.length; j++) {
+            var to = raw[j].to
+            if (!colors[to]) colors[to] = pickColor()
+            list.push({ from: raw[j].from, to: to, color: colors[to] })
+            perNode[to] = colors[to]
+            if (!perNode[raw[j].from]) perNode[raw[j].from] = colors[to]
         }
 
-        connectionCanvas.requestPaint()
+        // Assign only what changed: an unchanged list keeps its cards
+        if (!sameData(wires, list)) wires = list
+        if (!sameData(nodeColors, perNode)) nodeColors = perNode
+
+        var sources = selectedRoomIndex >= 0 ? Plasmoid.offlineSources(selectedRoomIndex) : []
+        if (!sameData(ghostSources, sources)) ghostSources = sources
+        var sinks = selectedRoomIndex >= 0 ? Plasmoid.offlineSinks(selectedRoomIndex) : []
+        if (!sameData(ghostSinks, sinks)) ghostSinks = sinks
     }
 
-    // Called on reapplyRequested (new stream appeared while room is active).
-    // Preserves all live connections unchanged. Patches dead connections
-    // (whose input PA index no longer exists) by matching the new stream's
-    // appName+mediaName — avoids ordinal-position swap when tabs pause/resume.
-    function handleNewStreams() {
-        if (!fullRoot.sinkInputModel) return
-
-        // Build map: inputIdx → {appName, mediaName} for all live streams
-        var liveStreams = {}
-        for (var j = 0; j < fullRoot.sinkInputModel.count; j++) {
-            var iidx = fullRoot.sinkInputModel.index(j, 0)
-            var idx       = fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 1)
-            var appName   = fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 2)
-            var mediaName = fullRoot.sinkInputModel.data(iidx, Qt.UserRole + 3)
-            liveStreams[idx] = { appName: appName, mediaName: mediaName }
-        }
-
-        // From current connections, collect which live input indices are already wired
-        var wiredIndices = {}
-        for (var k = 0; k < connections.length; k++) {
-            var c = connections[k]
-            if (c.from.indexOf("input:") === 0) {
-                var cidx = parseInt(c.from.substring(6))
-                if (liveStreams[cidx]) wiredIndices[cidx] = true
-            }
-        }
-
-        // Collect brand-new (unwired) live streams as candidates to fill dead slots
-        var newStreamCandidates = [] // [{inputIdx, appName, mediaName}]
-        for (var nidx in liveStreams) {
-            if (!wiredIndices[nidx])
-                newStreamCandidates.push({ inputIdx: parseInt(nidx),
-                                           appName:   liveStreams[nidx].appName,
-                                           mediaName: liveStreams[nidx].mediaName })
-        }
-
-        if (newStreamCandidates.length === 0) {
-            // No new streams — just re-apply existing connections for any that drifted
-            applyPerStreamRouting()
-            return
-        }
-
-        // Patch dead connections: replace dead input:X with a matching new stream
-        var usedCandidates = {}
-        var newConns = connections.slice()
-        for (var i = 0; i < newConns.length; i++) {
-            var conn = newConns[i]
-            if (conn.from.indexOf("input:") !== 0) continue
-            var connIdx = parseInt(conn.from.substring(6))
-            if (liveStreams[connIdx]) continue  // Still live — leave alone
-
-            // Dead connection — find best matching new stream
-            // Priority: same appName AND same mediaName (tab title stable across pause/resume)
-            // Fallback: same appName only (if mediaName blank or changed)
-            var bestMatch = -1
-            for (var s = 0; s < newStreamCandidates.length; s++) {
-                var cand = newStreamCandidates[s]
-                if (usedCandidates[cand.inputIdx]) continue
-                if (cand.appName !== (conn.appName || "")) continue
-                var mediaMatch = (conn.mediaName && conn.mediaName !== "" &&
-                                  cand.mediaName && cand.mediaName !== "" &&
-                                  cand.mediaName === conn.mediaName)
-                if (mediaMatch) { bestMatch = s; break }
-                if (bestMatch < 0) bestMatch = s  // appName-only fallback
-            }
-
-            if (bestMatch >= 0) {
-                var matched = newStreamCandidates[bestMatch]
-                usedCandidates[matched.inputIdx] = true
-                newConns[i] = { from: "input:" + matched.inputIdx, to: conn.to,
-                                color: conn.color,
-                                appName: matched.appName, mediaName: matched.mediaName }
-            }
-            // If no match found, leave the dead connection (won't be routed)
-        }
-
-        connections = newConns
-        connectionCanvas.requestPaint()
-        applyPerStreamRouting()
-    }
-
-    // Get wire endpoint: right-center of app card, left-center of sink card
-    function getNodeEdge(nodeKey) {
-        var item = null
-        if (nodeKey.indexOf("input:") === 0) {
-            var inputIdx = parseInt(nodeKey.substring(6))
-            for (var i = 0; i < appListView.count; i++) {
-                var appItem = appListView.itemAtIndex(i)
-                if (appItem && appItem.inputIndex === inputIdx) {
-                    item = appItem; break
-                }
-            }
-            if (!item) return null
-            return item.mapToItem(connectionArea, item.width, item.height / 2)
-        } else if (nodeKey.indexOf("app:") === 0) {
-            var appName = nodeKey.substring(4)
-            for (var i2 = 0; i2 < appListView.count; i2++) {
-                var appItem2 = appListView.itemAtIndex(i2)
-                if (appItem2 && appItem2.nodeName === appName) {
-                    item = appItem2; break
-                }
-            }
-            if (!item) return null
-            return item.mapToItem(connectionArea, item.width, item.height / 2)
-        } else if (nodeKey.indexOf("sink:") === 0) {
-            var sinkName = nodeKey.substring(5)
-            for (var k = 0; k < outListView.count; k++) {
-                var sinkItem = outListView.itemAtIndex(k)
-                if (sinkItem && sinkItem.nodeName === sinkName) {
-                    item = sinkItem; break
-                }
-            }
-            if (!item) return null
-            return item.mapToItem(connectionArea, 0, item.height / 2)
-        } else if (nodeKey.indexOf("vsinkin:") === 0 || nodeKey.indexOf("vsinkout:") === 0) {
-            var isIn = nodeKey.indexOf("vsinkin:") === 0
-            var vpaName = nodeKey.substring(isIn ? 8 : 9)
-            for (var vi = 0; vi < vsinkRepeater.count; vi++) {
-                var vsItem = vsinkRepeater.itemAt(vi)
-                if (vsItem && vsItem.paName === vpaName) { item = vsItem; break }
-            }
-            if (!item) return null
-            return isIn
-                ? item.mapToItem(connectionArea, 0, item.height / 2)
-                : item.mapToItem(connectionArea, item.width, item.height / 2)
-        }
-        return null
-    }
-
-    // Find the connection index nearest to point (mx, my), or -1
-    function findConnectionNear(mx, my) {
-        var threshold = 10
-        for (var i = 0; i < connections.length; i++) {
-            var conn = connections[i]
-            var p1 = getNodeEdge(conn.from)
-            var p2 = getNodeEdge(conn.to)
-            if (!p1 || !p2) continue
-            // Normalize: app/input left, sink right
-            if (conn.from.indexOf("sink:") === 0 || conn.from.indexOf("vsinkin:") === 0) {
-                var _tmp = p1; p1 = p2; p2 = _tmp
-            }
-            var cpOff = Math.abs(p2.x - p1.x) * 0.4
-            for (var s = 0; s <= 1.0; s += 0.02) {
-                var it = 1 - s
-                var bx = it*it*it*p1.x + 3*it*it*s*(p1.x+cpOff) + 3*it*s*s*(p2.x-cpOff) + s*s*s*p2.x
-                var by = it*it*it*p1.y + 3*it*it*s*p1.y + 3*it*s*s*p2.y + s*s*s*p2.y
-                var dx = mx - bx
-                var dy = my - by
-                if (dx*dx + dy*dy < threshold*threshold)
-                    return i
-            }
-        }
-        return -1
+    function refreshVirtualNodes() {
+        var nodes = selectedRoomIndex >= 0 ? Plasmoid.groupVirtualSinks(selectedRoomIndex) : []
+        if (!sameData(virtualNodes, nodes)) virtualNodes = nodes
     }
 
     // ════════════════════════════════════════════════════════════════════
-    //  MAIN LAYOUT
+    //  Layout
     // ════════════════════════════════════════════════════════════════════
     RowLayout {
         anchors.fill: parent
         spacing: 0
 
-        // ─────────────────────────────────────────────────────────────
-        //  LEFT SIDEBAR — Rooms
-        // ─────────────────────────────────────────────────────────────
-        Rectangle {
-            id: sidebar
+        RoomSidebar {
             Layout.fillHeight: true
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 18
-            Layout.minimumWidth:   Kirigami.Units.gridUnit * 14
-            color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                           Kirigami.Theme.backgroundColor.g,
-                           Kirigami.Theme.backgroundColor.b, 0.6)
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 16
+            Layout.minimumWidth:   Kirigami.Units.gridUnit * 13
+            Layout.maximumWidth:   Kirigami.Units.gridUnit * 18
 
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: Kirigami.Units.smallSpacing
-                spacing: Kirigami.Units.smallSpacing
-
-                // ── Logo + Title ────────────────────────────────────
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Kirigami.Units.smallSpacing
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Image {
-                        source: "icon.png"
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.medium
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.medium
-                        sourceSize: Qt.size(Kirigami.Units.iconSizes.medium,
-                                            Kirigami.Units.iconSizes.medium)
-                        smooth: true
-                    }
-
-                    PlasmaExtras.Heading {
-                        level: 3
-                        text: "SoundRoot"
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
-                    }
-                }
-
-                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.3 }
-
-                // ── Room list ────────────────────────────────────────
-                QQC2.ScrollView {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-
-                    ListView {
-                        id: roomListView
-                        model: fullRoot.groupModel
-                        spacing: 2
-                        clip: true
-                        // Survives delegate recycling during moveGroup reorders
-                        property int dragIndex: -1
-
-                        delegate: Rectangle {
-                            id: roomDelegate
-                            width: roomListView.width
-                            height: roomDelegateRow.implicitHeight + Kirigami.Units.smallSpacing * 2
-                            radius: Kirigami.Units.smallSpacing
-                            color: fullRoot.selectedRoomIndex === index
-                                   ? Qt.rgba(Kirigami.Theme.highlightColor.r,
-                                             Kirigami.Theme.highlightColor.g,
-                                             Kirigami.Theme.highlightColor.b, 0.18)
-                                   : (roomMa.containsMouse
-                                      ? Qt.rgba(Kirigami.Theme.highlightColor.r,
-                                                Kirigami.Theme.highlightColor.g,
-                                                Kirigami.Theme.highlightColor.b, 0.08)
-                                      : "transparent")
-
-                            RowLayout {
-                                id: roomDelegateRow
-                                anchors.fill: parent
-                                anchors.margins: Kirigami.Units.smallSpacing
-                                spacing: Kirigami.Units.smallSpacing
-
-                                // Drag handle (grip icon)
-                                Item {
-                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                    Layout.fillHeight: true
-
-                                    Kirigami.Icon {
-                                        source: "handle-sort"
-                                        width: Kirigami.Units.iconSizes.small
-                                        height: Kirigami.Units.iconSizes.small
-                                        anchors.centerIn: parent
-                                        isMask: true
-                                        opacity: handleDragArea.containsMouse || handleDragArea.pressed ? 0.8
-                                               : roomMa.containsMouse || fullRoot.selectedRoomIndex === index ? 0.4 : 0
-                                    }
-
-                                    MouseArea {
-                                        id: handleDragArea
-                                        anchors.fill: parent
-                                        cursorShape: Qt.SizeVerCursor
-                                        hoverEnabled: true
-                                        // preventStealing stops the ScrollView/Flickable from
-                                        // taking the drag away after the press is established
-                                        preventStealing: true
-
-                                        onPressed: function(mouse) {
-                                            roomListView.dragIndex = index
-                                            mouse.accepted = true
-                                        }
-                                        onPositionChanged: function(mouse) {
-                                            if (!pressed || roomListView.dragIndex < 0) return
-                                            var cp = mapToItem(roomListView.contentItem,
-                                                               mouse.x, mouse.y)
-                                            // Clamp so indexAt never returns -1 at list edges
-                                            var clampedY = Math.max(0,
-                                                Math.min(cp.y, roomListView.contentHeight - 1))
-                                            var targetIdx = roomListView.indexAt(cp.x, clampedY)
-                                            if (targetIdx >= 0 &&
-                                                    targetIdx !== roomListView.dragIndex) {
-                                                fullRoot.groupModel.moveGroup(
-                                                    roomListView.dragIndex, targetIdx)
-                                                roomListView.dragIndex = targetIdx
-                                            }
-                                        }
-                                        onReleased: { roomListView.dragIndex = -1 }
-                                    }
-                                }
-
-                                // Color bar
-                                Rectangle {
-                                    width: 4
-                                    Layout.fillHeight: true
-                                    radius: 2
-                                    color: model.groupColor || "#4a90d9"
-                                    opacity: model.groupActive ? 1.0 : 0.25
-                                }
-
-                                // Room icon
-                                Kirigami.Icon {
-                                    source: model.groupIcon || "audio-card"
-                                    Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
-                                    Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
-                                    opacity: model.groupActive ? 1.0 : 0.5
-                                }
-
-                                // Name + route count
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 0
-
-                                    PlasmaComponents.Label {
-                                        text: model.groupName
-                                        font.bold: true
-                                        font.pointSize: Kirigami.Theme.defaultFont.pointSize
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                        opacity: model.groupActive ? 1.0 : 0.6
-                                    }
-                                    PlasmaComponents.Label {
-                                        text: model.routeCount + " link" + (model.routeCount !== 1 ? "s" : "")
-                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                        opacity: 0.5
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                    }
-                                }
-
-                                // Active toggle
-                                PlasmaComponents.Switch {
-                                    checked: model.groupActive
-                                    onToggled: {
-                                        if (checked) {
-                                            fullRoot.activateRoomAt(index)
-                                        } else {
-                                            Plasmoid.deactivateGroup(index)
-                                        }
-                                        // Restore binding — user toggle breaks it
-                                        checked = Qt.binding(function() { return model.groupActive })
-                                    }
-                                }
-
-                                // Three-dot menu
-                                PlasmaComponents.ToolButton {
-                                    icon.name: "overflow-menu"
-                                    icon.width: Kirigami.Units.iconSizes.small
-                                    icon.height: Kirigami.Units.iconSizes.small
-                                    onClicked: roomContextMenu.open()
-                                    visible: roomMa.containsMouse || fullRoot.selectedRoomIndex === index
-
-                                    QQC2.Menu {
-                                        id: roomContextMenu
-                                        QQC2.MenuItem {
-                                            text: "Edit"
-                                            icon.name: "document-edit"
-                                            onTriggered: {
-                                                fullRoot.editingRoomIndex = index
-                                                roomNameField.text = model.groupName
-                                                addRoomCol.selectedColor = model.groupColor || "#4a90d9"
-                                                addRoomCol.selectedIcon = model.groupIcon || "audio-card"
-                                                addRoomOverlay.visible = true
-                                            }
-                                        }
-                                        QQC2.MenuItem {
-                                            text: "Remove"
-                                            icon.name: "edit-delete"
-                                            onTriggered: {
-                                                if (fullRoot.groupModel) {
-                                                    // Tear down live routing, virtual sinks and loopbacks
-                                                    // first; they would otherwise outlive the room.
-                                                    if (fullRoot.groupModel.isGroupActive(index))
-                                                        Plasmoid.deactivateGroup(index)
-                                                    // Selection is fixed up in onRowsRemoved below
-                                                    fullRoot.groupModel.removeGroup(index)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            MouseArea {
-                                id: roomMa
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                acceptedButtons: Qt.LeftButton
-                                onClicked: fullRoot.selectRoom(index)
-                                z: -1
-                            }
-                        }
-                    }
-                }
-
-                // ── Bottom action bar: New Room + Settings ───────────
-                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.15 }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-
-                    // New Room button — fills remaining space
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: Kirigami.Units.gridUnit * 2
-                        radius: Kirigami.Units.smallSpacing
-                        color: addBtnMa.pressed
-                               ? Qt.rgba(0.29, 0.56, 0.85, 0.35)
-                               : addBtnMa.containsMouse
-                                 ? Qt.rgba(0.29, 0.56, 0.85, 0.22)
-                                 : Qt.rgba(0.29, 0.56, 0.85, 0.12)
-
-                        Behavior on color { ColorAnimation { duration: 100 } }
-
-                        // Left accent bar
-                        Rectangle {
-                            anchors { left: parent.left; top: parent.top; bottom: parent.bottom; margins: 3 }
-                            width: 2
-                            radius: 1
-                            color: "#4a90d9"
-                            opacity: addBtnMa.containsMouse ? 1.0 : 0.6
-                            Behavior on opacity { NumberAnimation { duration: 100 } }
-                        }
-
-                        RowLayout {
-                            anchors.centerIn: parent
-                            spacing: Kirigami.Units.smallSpacing
-                            Kirigami.Icon {
-                                source: "list-add"
-                                isMask: true
-                                color: "#4a90d9"
-                                Layout.preferredWidth:  Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                            }
-                            PlasmaComponents.Label {
-                                text: "New Room"
-                                font.bold: true
-                                color: "#4a90d9"
-                            }
-                        }
-
-                        MouseArea {
-                            id: addBtnMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                fullRoot.editingRoomIndex = -1
-                                roomNameField.text = ""
-                                addRoomCol.selectedColor = "#4a90d9"
-                                addRoomCol.selectedIcon = "audio-card"
-                                addRoomOverlay.visible = true
-                            }
-                        }
-                    }
-
-                    // Settings icon
-                    PlasmaComponents.ToolButton {
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 2
-                        Layout.preferredHeight: Kirigami.Units.gridUnit * 2
-                        icon.name: "configure"
-                        opacity: hovered ? 1.0 : 0.5
-                        Behavior on opacity { NumberAnimation { duration: 100 } }
-                        onClicked: Plasmoid.internalAction("configure").trigger()
-                        PlasmaComponents.ToolTip { text: "Settings" }
-                    }
-                }
+            groupModel: fullRoot.groupModel
+            selectedIndex: fullRoot.selectedRoomIndex
+            onRoomSelected: function(row) { fullRoot.selectRoom(row) }
+            onNewRoomRequested: roomDialog.openForNew()
+            onEditRoomRequested: function(row, name, color, icon) {
+                roomDialog.openForEdit(row, name, color, icon)
             }
         }
 
         // Sidebar / main separator
         Rectangle {
             Layout.fillHeight: true
-            width: 1
+            Layout.preferredWidth: 1
             color: Qt.rgba(Kirigami.Theme.textColor.r,
                            Kirigami.Theme.textColor.g,
                            Kirigami.Theme.textColor.b, 0.1)
         }
 
-        // ─────────────────────────────────────────────────────────────
-        //  MAIN CONTENT — Connection Board
-        // ─────────────────────────────────────────────────────────────
-        Rectangle {
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: "transparent"
+            spacing: 0
+
+            // ── Header bar ──────────────────────────────────────────
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: headerRow.implicitHeight + Kirigami.Units.smallSpacing * 2
+                visible: fullRoot.selectedRoomIndex >= 0
+                color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                               Kirigami.Theme.backgroundColor.g,
+                               Kirigami.Theme.backgroundColor.b, 0.4)
 
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: 0
-
-                // ── Header bar ────────────────────────────────────
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: headerCol.implicitHeight + Kirigami.Units.smallSpacing * 2
-                    color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                                   Kirigami.Theme.backgroundColor.g,
-                                   Kirigami.Theme.backgroundColor.b, 0.4)
-
-                    ColumnLayout {
-                        id: headerCol
-                        anchors.fill: parent
-                        anchors.margins: Kirigami.Units.smallSpacing
-                        spacing: 2
-
-                        RowLayout {
-                            id: headerRow
-                            Layout.fillWidth: true
-                            spacing: Kirigami.Units.smallSpacing
-
-                            PlasmaExtras.Heading {
-                                level: 4
-                                text: {
-                                    if (fullRoot.selectedRoomIndex < 0) return "Select a Room"
-                                    var gm = fullRoot.groupModel
-                                    if (!gm) return "Room"
-                                    var idx = gm.index(fullRoot.selectedRoomIndex, 0)
-                                    var n = gm.data(idx, Qt.DisplayRole) || "Room"
-                                    return n + "  —  drag to connect"
-                                }
-                                Layout.fillWidth: true
-                                elide: Text.ElideRight
-                                opacity: 0.9
-                            }
-
-                            PlasmaComponents.Button {
-                                visible: fullRoot.selectedRoomIndex >= 0 && fullRoot.connections.length > 0
-                                text: "Clear All"
-                                icon.name: "edit-clear-all"
-                                onClicked: {
-                                    fullRoot.connections = []
-                                    fullRoot.syncConnectionsToModel()
-                                    connectionCanvas.requestPaint()
-                                }
-                            }
-
-                            PlasmaComponents.ToolButton {
-                                visible: fullRoot.selectedRoomIndex >= 0
-                                icon.name: "server-database"
-                                icon.width:  Kirigami.Units.iconSizes.small
-                                icon.height: Kirigami.Units.iconSizes.small
-                                opacity: hovered ? 1.0 : 0.55
-                                onClicked: {
-                                    fullRoot.addingVsink = !fullRoot.addingVsink
-                                    if (fullRoot.addingVsink)
-                                        Qt.callLater(function() { vsinkNameField.forceActiveFocus() })
-                                }
-                                PlasmaComponents.ToolTip { text: "Add Virtual Output" }
-                            }
-                        }
-
-                        // Master volume moved to bottom of the popup (see below)
-                    }
-                }
-
-                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.2 }
-
-                // ── No room selected state ──────────────────────────
-                PlasmaExtras.PlaceholderMessage {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    visible: fullRoot.selectedRoomIndex < 0
-                    text: "Select a Room"
-                    explanation: "Choose a room from the sidebar\nor create a new one.\n\nDrag from an app to an output device\nto create audio connections."
-                    iconName: "audio-volume-high"
-                }
-
-                // ── Connection board: APPS | wires | OUTPUTS ────────
-                Item {
-                    id: connectionArea
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    visible: fullRoot.selectedRoomIndex >= 0
-
-                    // ── Canvas for drawing connection lines ─────────
-                    Canvas {
-                        id: connectionCanvas
-                        anchors.fill: parent
-                        z: 5
-                        // We must not block mouse events for items below
-                        // We'll use an overlay MouseArea for drag only
-
-                        onPaint: {
-                            var ctx = getContext("2d")
-                            ctx.clearRect(0, 0, width, height)
-
-                            // Draw existing connections
-                            for (var i = 0; i < fullRoot.connections.length; i++) {
-                                var conn = fullRoot.connections[i]
-                                var p1 = fullRoot.getNodeEdge(conn.from)
-                                var p2 = fullRoot.getNodeEdge(conn.to)
-                                if (!p1 || !p2) continue
-                                // Normalize: app/input/vsinkout is always left (p1), sink/vsinkin is right (p2)
-                                // so the bezier curve bows inward naturally
-                                if (conn.from.indexOf("sink:") === 0 || conn.from.indexOf("vsinkin:") === 0) {
-                                    var _tmp = p1; p1 = p2; p2 = _tmp
-                                }
-
-                                var isHovered = (i === fullRoot.hoveredConnectionIdx)
-                                ctx.strokeStyle = isHovered ? "#ff4444" : conn.color
-                                ctx.lineWidth = isHovered ? 4 : 2.5
-                                ctx.globalAlpha = isHovered ? 0.95 : 0.7
-                                ctx.beginPath()
-                                ctx.moveTo(p1.x, p1.y)
-                                var cpOffset = Math.abs(p2.x - p1.x) * 0.4
-                                ctx.bezierCurveTo(p1.x + cpOffset, p1.y,
-                                                  p2.x - cpOffset, p2.y,
-                                                  p2.x, p2.y)
-                                ctx.stroke()
-
-                                // Draw small circles at endpoints
-                                ctx.globalAlpha = isHovered ? 1.0 : 0.9
-                                ctx.fillStyle = isHovered ? "#ff4444" : conn.color
-                                ctx.beginPath()
-                                ctx.arc(p1.x, p1.y, isHovered ? 5 : 4, 0, 2 * Math.PI)
-                                ctx.fill()
-                                ctx.beginPath()
-                                ctx.arc(p2.x, p2.y, isHovered ? 5 : 4, 0, 2 * Math.PI)
-                                ctx.fill()
-                            }
-
-                            // Draw drag line
-                            if (fullRoot.isDragging) {
-                                ctx.strokeStyle = "#ffffff"
-                                ctx.globalAlpha = 0.6
-                                ctx.lineWidth = 2
-                                ctx.setLineDash([6, 4])
-                                ctx.beginPath()
-                                ctx.moveTo(fullRoot.dragStartX, fullRoot.dragStartY)
-                                var dx = Math.abs(fullRoot.dragEndX - fullRoot.dragStartX) * 0.4
-                                ctx.bezierCurveTo(fullRoot.dragStartX + dx, fullRoot.dragStartY,
-                                                  fullRoot.dragEndX - dx, fullRoot.dragEndY,
-                                                  fullRoot.dragEndX, fullRoot.dragEndY)
-                                ctx.stroke()
-                                ctx.setLineDash([])
-                            }
-                            ctx.globalAlpha = 1.0
-                        }
-                    }
-
-                    // ── Three-column layout: Apps | Center | Outputs ──
-                    RowLayout {
-                        anchors.fill: parent
-                        spacing: 0
-                        z: 1
-
-                        // ════ APPLICATIONS COLUMN ════════════════════
-                        ColumnLayout {
-                            Layout.fillHeight: true
-                            Layout.preferredWidth: parent.width * 0.35
-                            Layout.maximumWidth: parent.width * 0.4
-                            spacing: 0
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: appHeaderLbl.implicitHeight + Kirigami.Units.smallSpacing * 2
-                                color: "transparent"
-
-                                PlasmaComponents.Label {
-                                    id: appHeaderLbl
-                                    anchors.centerIn: parent
-                                    text: "APPLICATIONS"
-                                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                    font.weight: Font.DemiBold
-                                    font.letterSpacing: 1.5
-                                    opacity: 0.5
-                                }
-                            }
-
-                            Kirigami.Separator { Layout.fillWidth: true; opacity: 0.15 }
-
-                            QQC2.ScrollView {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-
-                                ListView {
-                                    id: appListView
-                                    model: fullRoot.sinkInputModel
-                                    clip: true
-                                    spacing: 4
-                                    topMargin: Kirigami.Units.smallSpacing
-                                    leftMargin: Kirigami.Units.smallSpacing
-                                    rightMargin: Kirigami.Units.smallSpacing
-
-                                    onContentYChanged: {
-                                        if (!fullRoot.scrollSyncing) {
-                                            fullRoot.scrollSyncing = true
-                                            outListView.contentY = contentY
-                                            fullRoot.scrollSyncing = false
-                                        }
-                                        connectionCanvas.requestPaint()
-                                    }
-
-                                    delegate: Rectangle {
-                                        id: appCard
-                                        property string nodeName: model.appName || ""
-                                        property int inputIndex: model.inputIndex || 0
-                                        property string nodeKey: "input:" + inputIndex
-                                        width: appListView.width - appListView.leftMargin - appListView.rightMargin
-                                        height: appCardRow.implicitHeight + Kirigami.Units.smallSpacing * 2
-                                        radius: Kirigami.Units.smallSpacing
-                                        color: {
-                                            var gc = fullRoot.findGroupColor(nodeKey)
-                                            if (gc !== "")
-                                                return Qt.rgba(Qt.color(gc).r, Qt.color(gc).g, Qt.color(gc).b, 0.15)
-                                            return Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                                                           Kirigami.Theme.backgroundColor.g,
-                                                           Kirigami.Theme.backgroundColor.b, 0.35)
-                                        }
-                                        border.width: fullRoot.isDragging && fullRoot.dragFrom !== nodeKey ? 2 : 1
-                                        border.color: {
-                                            if (fullRoot.isDragging && fullRoot.dragFrom !== nodeKey)
-                                                return Qt.rgba(1, 1, 1, 0.3)
-                                            var gc = fullRoot.findGroupColor(nodeKey)
-                                            if (gc !== "") return gc
-                                            return Qt.rgba(Kirigami.Theme.textColor.r,
-                                                           Kirigami.Theme.textColor.g,
-                                                           Kirigami.Theme.textColor.b, 0.06)
-                                        }
-
-                                        RowLayout {
-                                            id: appCardRow
-                                            anchors.fill: parent
-                                            anchors.margins: Kirigami.Units.smallSpacing
-                                            spacing: Kirigami.Units.smallSpacing
-
-                                            Kirigami.Icon {
-                                                source: model.iconName || "applications-multimedia"
-                                                Layout.preferredWidth: Kirigami.Units.iconSizes.medium
-                                                Layout.preferredHeight: Kirigami.Units.iconSizes.medium
-                                            }
-
-                                            ColumnLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 0
-                                                PlasmaComponents.Label {
-                                                    Layout.fillWidth: true
-                                                    text: model.appName || "Unknown"
-                                                    font.pointSize: Kirigami.Theme.defaultFont.pointSize
-                                                    font.bold: true
-                                                    elide: Text.ElideRight
-                                                }
-                                                PlasmaComponents.Label {
-                                                    Layout.fillWidth: true
-                                                    visible: model.mediaName && model.mediaName !== model.appName
-                                                    text: model.mediaName || ""
-                                                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                                    opacity: 0.65
-                                                    elide: Text.ElideRight
-                                                }
-                                                // ── Per-app volume slider ──────────────────
-                                                RowLayout {
-                                                    Layout.fillWidth: true
-                                                    spacing: Kirigami.Units.smallSpacing
-                                                    QQC2.Slider {
-                                                        id: appVolSlider
-                                                        Layout.fillWidth: true
-                                                        from: 0; to: 150
-                                                        property int backendVol: model.volumePercent ?? 100
-                                                        onBackendVolChanged: if (!pressed) value = backendVol
-                                                        Component.onCompleted: value = backendVol
-                                                        onMoved: Plasmoid.setSinkInputVolume(model.inputIndex, Math.round(value))
-                                                    }
-                                                    PlasmaComponents.Label {
-                                                        text: Math.round(appVolSlider.value) + "%"
-                                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                                        opacity: 0.7
-                                                        Layout.minimumWidth: Kirigami.Units.gridUnit * 2
-                                                    }
-                                                }
-                                            }
-
-                                            // Connection dot / drag handle
-                                            Rectangle {
-                                                id: appDragDot
-                                                width: 14; height: 14; radius: 7
-                                                color: {
-                                                    var gc = fullRoot.findGroupColor(appCard.nodeKey)
-                                                    return gc !== "" ? gc : "#888"
-                                                }
-                                                border.width: 2
-                                                border.color: Qt.lighter(color, 1.4)
-
-                                                MouseArea {
-                                                    anchors.fill: parent
-                                                    anchors.margins: -8
-                                                    cursorShape: Qt.CrossCursor
-                                                    preventStealing: true
-                                                    onPressed: function(mouse) {
-                                                        var mapped = appDragDot.mapToItem(connectionArea, appDragDot.width / 2, appDragDot.height / 2)
-                                                        fullRoot.isDragging = true
-                                                        fullRoot.dragFrom = appCard.nodeKey
-                                                        fullRoot.dragStartX = mapped.x
-                                                        fullRoot.dragStartY = mapped.y
-                                                        fullRoot.dragEndX = mapped.x
-                                                        fullRoot.dragEndY = mapped.y
-                                                        connectionCanvas.requestPaint()
-                                                    }
-                                                    onPositionChanged: function(mouse) {
-                                                        if (fullRoot.isDragging) {
-                                                            var pos = mapToItem(connectionArea, mouse.x, mouse.y)
-                                                            fullRoot.dragEndX = pos.x
-                                                            fullRoot.dragEndY = pos.y
-                                                            connectionCanvas.requestPaint()
-                                                        }
-                                                    }
-                                                    onReleased: function(mouse) {
-                                                        if (fullRoot.isDragging) {
-                                                            var pos = mapToItem(connectionArea, mouse.x, mouse.y)
-                                                            var target = fullRoot.findNodeAt(pos.x, pos.y)
-                                                            if (target !== "" && target !== fullRoot.dragFrom) {
-                                                                fullRoot.addConnection(fullRoot.dragFrom, target)
-                                                                fullRoot.isDragging = false
-                                                                fullRoot.dragFrom = ""
-                                                                connectionCanvas.requestPaint()
-                                                            }
-                                                            // else: keep isDragging=true → click-click mode via dragTracker
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // Drop target
-                                        DropArea {
-                                            anchors.fill: parent
-                                            keys: ["audio-node"]
-                                            onDropped: {
-                                                if (fullRoot.isDragging && fullRoot.dragFrom !== appCard.nodeKey) {
-                                                    fullRoot.addConnection(fullRoot.dragFrom, appCard.nodeKey)
-                                                }
-                                            }
-                                        }
-
-                                        // Right-click to remove connections
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            acceptedButtons: Qt.RightButton
-                                            onClicked: {
-                                                fullRoot.removeAllConnectionsFor(appCard.nodeKey)
-                                            }
-                                            z: -1
-                                        }
-                                    }
-
-                                    PlasmaExtras.PlaceholderMessage {
-                                        anchors.centerIn: parent
-                                        width: parent.width - Kirigami.Units.gridUnit * 2
-                                        visible: appListView.count === 0
-                                        text: "No audio streams"
-                                        explanation: "Play something to see\nactive applications."
-                                        iconName: "applications-multimedia"
-                                    }
-                                }
-                            }
-                        }
-
-                        // ════ CENTER SPACER (wires canvas, hidden when virtual column open) ══
-                        Item {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            Layout.minimumWidth: Kirigami.Units.gridUnit * 2
-
-                            PlasmaComponents.Label {
-                                anchors.centerIn: parent
-                                visible: fullRoot.connections.length === 0
-                                text: "← Drag from dot →\nto connect"
-                                opacity: 0.3
-                                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                horizontalAlignment: Text.AlignHCenter
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                acceptedButtons: Qt.NoButton
-                                onWheel: function(wheel) {
-                                    if (!fullRoot.scrollSyncing)
-                                        appListView.flick(0, wheel.angleDelta.y * 5)
-                                }
-                                z: -1
-                            }
-                        }
-
-                        // ════ VIRTUAL SINKS COLUMN ═══════════════════
-                        // Fully hidden (zero layout space) when no virtual sinks and not adding.
-                        ColumnLayout {
-                            id: vsinkCol
-                            Layout.fillHeight: true
-                            Layout.preferredWidth: Kirigami.Units.gridUnit * 16
-                            Layout.minimumWidth: Kirigami.Units.gridUnit * 12
-                            // Hide completely — ColumnLayout with visible:false takes zero space
-                            visible: fullRoot.selectedRoomIndex >= 0 &&
-                                     (fullRoot.virtualSinksList.length > 0 || fullRoot.addingVsink)
-                            spacing: 0
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: vsinkHeaderRow.implicitHeight + Kirigami.Units.smallSpacing * 2
-                                color: "transparent"
-
-                                RowLayout {
-                                    id: vsinkHeaderRow
-                                    anchors.fill: parent
-                                    anchors.margins: Kirigami.Units.smallSpacing
-                                    spacing: 2
-
-                                    PlasmaComponents.Label {
-                                        text: "VIRTUAL"
-                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                        font.weight: Font.DemiBold
-                                        font.letterSpacing: 1.5
-                                        opacity: 0.5
-                                        Layout.fillWidth: true
-                                        horizontalAlignment: Text.AlignHCenter
-                                    }
-                                }
-                            }
-
-                            Kirigami.Separator { Layout.fillWidth: true; opacity: 0.15 }
-
-                            // Inline "add virtual sink" input row
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Layout.leftMargin:  Kirigami.Units.smallSpacing
-                                Layout.rightMargin: Kirigami.Units.smallSpacing
-                                Layout.topMargin:   fullRoot.addingVsink ? Kirigami.Units.smallSpacing : 0
-                                spacing: Kirigami.Units.smallSpacing
-                                visible: fullRoot.addingVsink
-
-                                QQC2.TextField {
-                                    id: vsinkNameField
-                                    Layout.fillWidth: true
-                                    placeholderText: "Name…"
-                                    onAccepted: {
-                                        if (text.trim() !== "") {
-                                            Plasmoid.addVirtualSink(fullRoot.selectedRoomIndex, text.trim())
-                                            fullRoot.refreshVirtualSinks()
-                                        }
-                                        text = ""
-                                        fullRoot.addingVsink = false
-                                    }
-                                    Keys.onEscapePressed: {
-                                        text = ""; fullRoot.addingVsink = false
-                                    }
-                                }
-                                PlasmaComponents.ToolButton {
-                                    icon.name: "dialog-ok"
-                                    icon.width:  Kirigami.Units.iconSizes.small
-                                    icon.height: Kirigami.Units.iconSizes.small
-                                    onClicked: vsinkNameField.accepted()
-                                }
-                            }
-
-                            Column {
-                                id: vsinkListColumn
-                                Layout.fillWidth: true
-                                spacing: 4
-                                topPadding: Kirigami.Units.smallSpacing
-                                leftPadding: Kirigami.Units.smallSpacing
-                                rightPadding: Kirigami.Units.smallSpacing
-
-                                    Repeater {
-                                        id: vsinkRepeater
-                                        model: fullRoot.virtualSinksList
-
-                                        delegate: Rectangle {
-                                            id: vsinkCard
-                                            property string paName: modelData.paName || ""
-                                            property string displayName: modelData.displayName || ""
-                                            property string nodeKeyIn:  "vsinkin:"  + paName
-                                            property string nodeKeyOut: "vsinkout:" + paName
-
-                                            width: vsinkCol.width
-                                                   - vsinkListColumn.leftPadding
-                                                   - vsinkListColumn.rightPadding
-                                            // Fixed height: name row + dot row + padding
-                                            height: Kirigami.Units.gridUnit * 4
-                                            radius: 6
-                                            color: Qt.rgba(0.38, 0.20, 0.46, 0.18)
-                                            border.width: 1
-                                            border.color: Qt.rgba(0.61, 0.35, 0.71, 0.45)
-
-                                            // Top row: icon + name + delete button
-                                            RowLayout {
-                                                id: topRow
-                                                anchors.top: parent.top
-                                                anchors.left: parent.left
-                                                anchors.right: parent.right
-                                                anchors.margins: Kirigami.Units.smallSpacing
-                                                height: Kirigami.Units.gridUnit * 1.4
-                                                spacing: 4
-
-                                                PlasmaComponents.Label {
-                                                    text: vsinkCard.displayName
-                                                    font.bold: true
-                                                    elide: Text.ElideRight
-                                                    Layout.fillWidth: true
-                                                    verticalAlignment: Text.AlignVCenter
-                                                }
-
-                                                PlasmaComponents.ToolButton {
-                                                    icon.name: "edit-delete"
-                                                    icon.width:  Kirigami.Units.iconSizes.small
-                                                    icon.height: Kirigami.Units.iconSizes.small
-                                                    onClicked: {
-                                                        fullRoot.removeAllConnectionsFor(vsinkCard.nodeKeyIn)
-                                                        fullRoot.removeAllConnectionsFor(vsinkCard.nodeKeyOut)
-                                                        Plasmoid.removeVirtualSink(fullRoot.selectedRoomIndex, vsinkCard.paName)
-                                                        fullRoot.refreshVirtualSinks()
-                                                    }
-                                                    PlasmaComponents.ToolTip { text: "Delete tunnel" }
-                                                }
-                                            }
-
-                                            // Bottom row: IN dot ── ▶ ── OUT dot
-                                            RowLayout {
-                                                anchors.top: topRow.bottom
-                                                anchors.left: parent.left
-                                                anchors.right: parent.right
-                                                anchors.bottom: parent.bottom
-                                                anchors.leftMargin: Kirigami.Units.smallSpacing * 2
-                                                anchors.rightMargin: Kirigami.Units.smallSpacing * 2
-                                                anchors.bottomMargin: Kirigami.Units.smallSpacing
-                                                spacing: 4
-
-                                                // IN label + dot
-                                                Column {
-                                                    spacing: 1
-                                                    Layout.alignment: Qt.AlignVCenter
-                                                    PlasmaComponents.Label {
-                                                        text: "IN"
-                                                        font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.75
-                                                        font.weight: Font.DemiBold
-                                                        opacity: 0.5
-                                                        anchors.horizontalCenter: parent.horizontalCenter
-                                                    }
-                                                    Rectangle {
-                                                        id: vsinkInDot
-                                                        width: 13; height: 13; radius: 7
-                                                        anchors.horizontalCenter: parent.horizontalCenter
-                                                        color: {
-                                                            var gc = fullRoot.findGroupColor(vsinkCard.nodeKeyIn)
-                                                            return gc !== "" ? gc : "#9b59b6"
-                                                        }
-                                                        border.width: 2
-                                                        border.color: Qt.lighter(color, 1.5)
-                                                        MouseArea {
-                                                            anchors.fill: parent; anchors.margins: -8
-                                                            cursorShape: Qt.CrossCursor; preventStealing: true
-                                                            onPressed: function(mouse) {
-                                                                var mp = vsinkInDot.mapToItem(connectionArea, vsinkInDot.width/2, vsinkInDot.height/2)
-                                                                fullRoot.isDragging = true
-                                                                fullRoot.dragFrom = vsinkCard.nodeKeyIn
-                                                                fullRoot.dragStartX = mp.x; fullRoot.dragStartY = mp.y
-                                                                fullRoot.dragEndX = mp.x;   fullRoot.dragEndY = mp.y
-                                                                connectionCanvas.requestPaint()
-                                                            }
-                                                            onPositionChanged: function(mouse) {
-                                                                if (fullRoot.isDragging) {
-                                                                    var p = mapToItem(connectionArea, mouse.x, mouse.y)
-                                                                    fullRoot.dragEndX = p.x; fullRoot.dragEndY = p.y
-                                                                    connectionCanvas.requestPaint()
-                                                                }
-                                                            }
-                                                            onReleased: function(mouse) {
-                                                                if (fullRoot.isDragging) {
-                                                                    var p = mapToItem(connectionArea, mouse.x, mouse.y)
-                                                                    var tgt = fullRoot.findNodeAt(p.x, p.y)
-                                                                    if (tgt !== "" && tgt !== fullRoot.dragFrom) {
-                                                                        fullRoot.addConnection(fullRoot.dragFrom, tgt)
-                                                                        fullRoot.isDragging = false; fullRoot.dragFrom = ""
-                                                                        connectionCanvas.requestPaint()
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-
-                                                // Arrow line
-                                                Rectangle {
-                                                    Layout.fillWidth: true
-                                                    height: 1
-                                                    opacity: 0.4
-                                                    color: "#c07ad8"
-                                                    Layout.alignment: Qt.AlignVCenter
-                                                }
-                                                PlasmaComponents.Label {
-                                                    text: "▶"
-                                                    font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.7
-                                                    opacity: 0.6
-                                                    color: "#c07ad8"
-                                                    Layout.alignment: Qt.AlignVCenter
-                                                }
-                                                Rectangle {
-                                                    Layout.fillWidth: true
-                                                    height: 1
-                                                    opacity: 0.4
-                                                    color: "#c07ad8"
-                                                    Layout.alignment: Qt.AlignVCenter
-                                                }
-
-                                                // OUT label + dot
-                                                Column {
-                                                    spacing: 1
-                                                    Layout.alignment: Qt.AlignVCenter
-                                                    PlasmaComponents.Label {
-                                                        text: "OUT"
-                                                        font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.75
-                                                        font.weight: Font.DemiBold
-                                                        opacity: 0.5
-                                                        anchors.horizontalCenter: parent.horizontalCenter
-                                                    }
-                                                    Rectangle {
-                                                        id: vsinkOutDot
-                                                        width: 13; height: 13; radius: 7
-                                                        anchors.horizontalCenter: parent.horizontalCenter
-                                                        color: {
-                                                            var gc = fullRoot.findGroupColor(vsinkCard.nodeKeyOut)
-                                                            return gc !== "" ? gc : "#9b59b6"
-                                                        }
-                                                        border.width: 2
-                                                        border.color: Qt.lighter(color, 1.5)
-                                                        MouseArea {
-                                                            anchors.fill: parent; anchors.margins: -8
-                                                            cursorShape: Qt.CrossCursor; preventStealing: true
-                                                            onPressed: function(mouse) {
-                                                                var mp = vsinkOutDot.mapToItem(connectionArea, vsinkOutDot.width/2, vsinkOutDot.height/2)
-                                                                fullRoot.isDragging = true
-                                                                fullRoot.dragFrom = vsinkCard.nodeKeyOut
-                                                                fullRoot.dragStartX = mp.x; fullRoot.dragStartY = mp.y
-                                                                fullRoot.dragEndX = mp.x;   fullRoot.dragEndY = mp.y
-                                                                connectionCanvas.requestPaint()
-                                                            }
-                                                            onPositionChanged: function(mouse) {
-                                                                if (fullRoot.isDragging) {
-                                                                    var p = mapToItem(connectionArea, mouse.x, mouse.y)
-                                                                    fullRoot.dragEndX = p.x; fullRoot.dragEndY = p.y
-                                                                    connectionCanvas.requestPaint()
-                                                                }
-                                                            }
-                                                            onReleased: function(mouse) {
-                                                                if (fullRoot.isDragging) {
-                                                                    var p = mapToItem(connectionArea, mouse.x, mouse.y)
-                                                                    var tgt = fullRoot.findNodeAt(p.x, p.y)
-                                                                    if (tgt !== "" && tgt !== fullRoot.dragFrom) {
-                                                                        fullRoot.addConnection(fullRoot.dragFrom, tgt)
-                                                                        fullRoot.isDragging = false; fullRoot.dragFrom = ""
-                                                                        connectionCanvas.requestPaint()
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            // Right-click to remove all connections
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                acceptedButtons: Qt.RightButton
-                                                onClicked: {
-                                                    fullRoot.removeAllConnectionsFor(vsinkCard.nodeKeyIn)
-                                                    fullRoot.removeAllConnectionsFor(vsinkCard.nodeKeyOut)
-                                                }
-                                                z: -1
-                                            }
-                                        }
-                                    }
-
-                            }
-                        }
-
-                        // Thin separator before outputs
-                        Rectangle {
-                            Layout.fillHeight: true
-                            width: 1
-                            opacity: 0.1
-                            color: Kirigami.Theme.textColor
-                            visible: fullRoot.selectedRoomIndex >= 0
-                        }
-
-                        // ════ OUTPUT DEVICES COLUMN ══════════════════
-                        ColumnLayout {
-                            Layout.fillHeight: true
-                            Layout.preferredWidth: parent.width * 0.35
-                            Layout.maximumWidth: parent.width * 0.4
-                            spacing: 0
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: outHeaderLbl.implicitHeight + Kirigami.Units.smallSpacing * 2
-                                color: "transparent"
-
-                                PlasmaComponents.Label {
-                                    id: outHeaderLbl
-                                    anchors.centerIn: parent
-                                    text: "OUTPUT DEVICES"
-                                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                    font.weight: Font.DemiBold
-                                    font.letterSpacing: 1.5
-                                    opacity: 0.5
-                                }
-                            }
-
-                            Kirigami.Separator { Layout.fillWidth: true; opacity: 0.15 }
-
-                            QQC2.ScrollView {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-
-                                ListView {
-                                    id: outListView
-                                    model: fullRoot.sinkModel
-                                    clip: true
-                                    spacing: 4
-                                    topMargin: Kirigami.Units.smallSpacing
-                                    leftMargin: Kirigami.Units.smallSpacing
-                                    rightMargin: Kirigami.Units.smallSpacing
-
-                                        onContentYChanged: {
-                                            if (!fullRoot.scrollSyncing) {
-                                                fullRoot.scrollSyncing = true
-                                                appListView.contentY = contentY
-                                                fullRoot.scrollSyncing = false
-                                            }
-                                            connectionCanvas.requestPaint()
-                                        }
-
-                                    delegate: Rectangle {
-                                        id: sinkCard
-                                        property string nodeName: model.sinkName || ""
-                                        property string nodeKey: "sink:" + nodeName
-                                        width: outListView.width - outListView.leftMargin - outListView.rightMargin
-                                        height: model.isVirtual ? 0 : (sinkCardCol.implicitHeight + Kirigami.Units.smallSpacing * 2)
-                                        visible: !model.isVirtual
-                                        clip: true
-                                        radius: Kirigami.Units.smallSpacing
-                                        color: {
-                                            var gc = fullRoot.findGroupColor(nodeKey)
-                                            if (gc !== "")
-                                                return Qt.rgba(Qt.color(gc).r, Qt.color(gc).g, Qt.color(gc).b, 0.15)
-                                            return Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                                                           Kirigami.Theme.backgroundColor.g,
-                                                           Kirigami.Theme.backgroundColor.b, 0.35)
-                                        }
-                                        border.width: fullRoot.isDragging && fullRoot.dragFrom !== nodeKey ? 2 : 1
-                                        border.color: {
-                                            if (fullRoot.isDragging && fullRoot.dragFrom !== nodeKey)
-                                                return Qt.rgba(1, 1, 1, 0.3)
-                                            var gc = fullRoot.findGroupColor(nodeKey)
-                                            if (gc !== "") return gc
-                                            return Qt.rgba(Kirigami.Theme.textColor.r,
-                                                           Kirigami.Theme.textColor.g,
-                                                           Kirigami.Theme.textColor.b, 0.06)
-                                        }
-
-                                        ColumnLayout {
-                                            id: sinkCardCol
-                                            anchors.fill: parent
-                                            anchors.margins: Kirigami.Units.smallSpacing
-                                            spacing: Kirigami.Units.smallSpacing
-
-                                            RowLayout {
-                                                Layout.fillWidth: true
-                                                spacing: Kirigami.Units.smallSpacing
-
-                                                // Drag dot on left side of output
-                                                Rectangle {
-                                                    id: sinkDragDot
-                                                    width: 14; height: 14; radius: 7
-                                                    color: {
-                                                        var gc = fullRoot.findGroupColor(sinkCard.nodeKey)
-                                                        return gc !== "" ? gc : "#888"
-                                                    }
-                                                    border.width: 2
-                                                    border.color: Qt.lighter(color, 1.4)
-
-                                                    MouseArea {
-                                                        anchors.fill: parent
-                                                        anchors.margins: -8
-                                                        cursorShape: Qt.CrossCursor
-                                                        preventStealing: true
-                                                        onPressed: function(mouse) {
-                                                            var mapped = sinkDragDot.mapToItem(connectionArea, sinkDragDot.width / 2, sinkDragDot.height / 2)
-                                                            fullRoot.isDragging = true
-                                                            fullRoot.dragFrom = sinkCard.nodeKey
-                                                            fullRoot.dragStartX = mapped.x
-                                                            fullRoot.dragStartY = mapped.y
-                                                            fullRoot.dragEndX = mapped.x
-                                                            fullRoot.dragEndY = mapped.y
-                                                            connectionCanvas.requestPaint()
-                                                        }
-                                                        onPositionChanged: function(mouse) {
-                                                            if (fullRoot.isDragging) {
-                                                                var pos = mapToItem(connectionArea, mouse.x, mouse.y)
-                                                                fullRoot.dragEndX = pos.x
-                                                                fullRoot.dragEndY = pos.y
-                                                                connectionCanvas.requestPaint()
-                                                            }
-                                                        }
-                                                        onReleased: function(mouse) {
-                                                            if (fullRoot.isDragging) {
-                                                                var pos = mapToItem(connectionArea, mouse.x, mouse.y)
-                                                                var target = fullRoot.findNodeAt(pos.x, pos.y)
-                                                                if (target !== "" && target !== fullRoot.dragFrom) {
-                                                                    fullRoot.addConnection(fullRoot.dragFrom, target)
-                                                                    fullRoot.isDragging = false
-                                                                    fullRoot.dragFrom = ""
-                                                                    connectionCanvas.requestPaint()
-                                                                }
-                                                                // else: keep isDragging=true → click-click mode via dragTracker
-                                                            }
-                                                        }
-                                                    }
-                                                }
-
-                                                Kirigami.Icon {
-                                                    source: {
-                                                        var desc = (model.sinkDescription || "").toLowerCase()
-                                                        if (desc.indexOf("headphone") >= 0 || desc.indexOf("headset") >= 0)
-                                                            return "audio-headphones"
-                                                        if (desc.indexOf("speaker") >= 0)
-                                                            return "audio-speakers"
-                                                        if (desc.indexOf("hdmi") >= 0 || desc.indexOf("monitor") >= 0)
-                                                            return "monitor"
-                                                        return "audio-card"
-                                                    }
-                                                    Layout.preferredWidth: Kirigami.Units.iconSizes.medium
-                                                    Layout.preferredHeight: Kirigami.Units.iconSizes.medium
-                                                }
-
-                                                PlasmaComponents.Label {
-                                                    Layout.fillWidth: true
-                                                    text: model.sinkDescription || model.sinkName
-                                                    font.bold: true
-                                                    elide: Text.ElideRight
-                                                }
-                                            }
-
-                                            // ── Per-device volume slider ───────────
-                                            RowLayout {
-                                                Layout.fillWidth: true
-                                                spacing: Kirigami.Units.smallSpacing
-
-                                                // Mute toggle button
-                                                PlasmaComponents.ToolButton {
-                                                    checkable: true
-                                                    checked: model.sinkMuted
-                                                    icon.name: model.sinkMuted ? "audio-volume-muted"
-                                                               : sinkSlider.value === 0 ? "audio-volume-muted"
-                                                               : sinkSlider.value < 40  ? "audio-volume-low"
-                                                                                        : "audio-volume-medium"
-                                                    Layout.preferredWidth:  Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing * 2
-                                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing * 2
-                                                    onClicked: Plasmoid.toggleSinkMute(sinkCard.nodeName)
-                                                }
-                                                QQC2.Slider {
-                                                    id: sinkSlider
-                                                    Layout.fillWidth: true
-                                                    from: 0; to: 150
-                                                    enabled: !model.sinkMuted
-                                                    opacity: model.sinkMuted ? 0.4 : 1.0
-                                                    property int backendVol: model.sinkVolumePercent ?? 100
-                                                    onBackendVolChanged: if (!pressed) value = backendVol
-                                                    Component.onCompleted: value = backendVol
-                                                    onMoved: Plasmoid.setSinkVolumeByName(sinkCard.nodeName, Math.round(value))
-                                                }
-                                                PlasmaComponents.Label {
-                                                    text: model.sinkMuted ? "muted" : Math.round(sinkSlider.value) + "%"
-                                                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                                    opacity: model.sinkMuted ? 0.5 : 0.65
-                                                    Layout.minimumWidth: Kirigami.Units.gridUnit * 2.5
-                                                }
-                                            }
-                                        }
-
-                                        // Drop target
-                                        DropArea {
-                                            anchors.fill: parent
-                                            keys: ["audio-node"]
-                                            onDropped: {
-                                                if (fullRoot.isDragging && fullRoot.dragFrom !== sinkCard.nodeKey) {
-                                                    fullRoot.addConnection(fullRoot.dragFrom, sinkCard.nodeKey)
-                                                }
-                                            }
-                                        }
-
-                                        // Right-click to remove connections
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            acceptedButtons: Qt.RightButton
-                                            onClicked: {
-                                                fullRoot.removeAllConnectionsFor(sinkCard.nodeKey)
-                                            }
-                                            z: -1
-                                        }
-                                    }
-
-                                    PlasmaExtras.PlaceholderMessage {
-                                        anchors.centerIn: parent
-                                        width: parent.width - Kirigami.Units.gridUnit * 2
-                                        visible: outListView.count === 0
-                                        text: "No output devices"
-                                        explanation: "No PulseAudio sinks detected."
-                                        iconName: "audio-speakers"
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // ── Connection hover detection (click to delete) ──
-                    MouseArea {
-                        id: connectionHoverArea
-                        anchors.fill: parent
-                        z: 6
-                        enabled: !fullRoot.isDragging
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton
-                        cursorShape: fullRoot.hoveredConnectionIdx >= 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-
-                        onPositionChanged: function(mouse) {
-                            var idx = fullRoot.findConnectionNear(mouse.x, mouse.y)
-                            if (idx !== fullRoot.hoveredConnectionIdx) {
-                                fullRoot.hoveredConnectionIdx = idx
-                                connectionCanvas.requestPaint()
-                            }
-                        }
-
-                        onExited: {
-                            if (fullRoot.hoveredConnectionIdx >= 0) {
-                                fullRoot.hoveredConnectionIdx = -1
-                                connectionCanvas.requestPaint()
-                            }
-                        }
-
-                        onPressed: function(mouse) {
-                            if (fullRoot.hoveredConnectionIdx >= 0) {
-                                fullRoot.removeConnection(fullRoot.hoveredConnectionIdx)
-                                fullRoot.hoveredConnectionIdx = -1
-                            } else {
-                                mouse.accepted = false
-                            }
-                        }
-                    }
-
-                    // ── Drag tracker: follows cursor in click-click mode ──
-                    MouseArea {
-                        id: dragTracker
-                        anchors.fill: parent
-                        z: 10
-                        visible: fullRoot.isDragging
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        cursorShape: Qt.CrossCursor
-
-                        onPositionChanged: function(mouse) {
-                            if (fullRoot.isDragging) {
-                                var pos = mapToItem(connectionArea, mouse.x, mouse.y)
-                                fullRoot.dragEndX = pos.x
-                                fullRoot.dragEndY = pos.y
-                                connectionCanvas.requestPaint()
-                            }
-                        }
-                        onClicked: function(mouse) {
-                            if (!fullRoot.isDragging) return
-                            if (mouse.button === Qt.RightButton) {
-                                // Cancel drag
-                                fullRoot.isDragging = false
-                                fullRoot.dragFrom = ""
-                                connectionCanvas.requestPaint()
-                                return
-                            }
-                            var pos = mapToItem(connectionArea, mouse.x, mouse.y)
-                            var target = fullRoot.findNodeAt(pos.x, pos.y)
-                            if (target !== "" && target !== fullRoot.dragFrom) {
-                                fullRoot.addConnection(fullRoot.dragFrom, target)
-                            }
-                            fullRoot.isDragging = false
-                            fullRoot.dragFrom = ""
-                            connectionCanvas.requestPaint()
-                        }
-                    }
-                }
-
-                // ── Master volume ── bottom of room content area ──────────────
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                    opacity: 0.2
-                    visible: fullRoot.selectedRoomIndex >= 0
-                }
                 RowLayout {
-                    Layout.fillWidth: true
-                    Layout.leftMargin:  Kirigami.Units.smallSpacing
-                    Layout.rightMargin: Kirigami.Units.smallSpacing
-                    Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    visible: fullRoot.selectedRoomIndex >= 0
+                    id: headerRow
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
 
-                    Kirigami.Icon {
-                        source: fullRoot.masterVolume === 0 ? "audio-volume-muted"
-                              : fullRoot.masterVolume < 40  ? "audio-volume-low"
-                              : fullRoot.masterVolume < 75  ? "audio-volume-medium"
-                              : "audio-volume-high"
-                        Layout.preferredWidth:  Kirigami.Units.iconSizes.small
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                        opacity: 0.75
+                    PlasmaExtras.Heading {
+                        id: roomTitle
+                        level: 4
+                        // Re-read on any change of the room list (a rename)
+                        property int revision: 0
+                        text: {
+                            revision
+                            return fullRoot.groupModel && fullRoot.selectedRoomIndex >= 0
+                                   ? fullRoot.groupModel.groupName(fullRoot.selectedRoomIndex) : ""
+                        }
+                        Connections {
+                            target: fullRoot.groupModel
+                            function onDataChanged() { roomTitle.revision++ }
+                        }
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: headerRow.width * 0.4
                     }
+
+                    // A room that is not switched on is only a plan
                     PlasmaComponents.Label {
-                        text: "Default Output"
+                        Layout.fillWidth: true
+                        text: fullRoot.selectedRoomActive
+                              ? "active — changes apply immediately"
+                              : "not active — wires are saved, nothing is rerouted"
                         font.pointSize: Kirigami.Theme.smallFont.pointSize
                         opacity: 0.6
+                        elide: Text.ElideRight
                     }
-                    QQC2.Slider {
-                        id: masterSlider
-                        Layout.fillWidth: true
-                        from: 0; to: 150
-                        property int backendVol: fullRoot.masterVolume
-                        onBackendVolChanged: if (!pressed) value = backendVol
-                        Component.onCompleted: value = backendVol
-                        onMoved: Plasmoid.setMasterVolume(Math.round(value))
+
+                    PlasmaComponents.Button {
+                        visible: !fullRoot.selectedRoomActive
+                        text: "Switch on"
+                        icon.name: "media-playback-start"
+                        onClicked: Plasmoid.activateRoom(fullRoot.selectedRoomIndex)
                     }
-                    PlasmaComponents.Label {
-                        text: Math.round(masterSlider.value) + "%"
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
-                        opacity: 0.7
-                        Layout.minimumWidth: Kirigami.Units.gridUnit * 2
+
+                    PlasmaComponents.Button {
+                        visible: fullRoot.wires.length > 0
+                        text: "Clear"
+                        icon.name: "edit-clear-all"
+                        onClicked: Plasmoid.clearRoom(fullRoot.selectedRoomIndex)
+                        PlasmaComponents.ToolTip { text: "Remove every wire of this room" }
                     }
+
+                    PlasmaComponents.Button {
+                        text: "Virtual node"
+                        icon.name: "list-add"
+                        onClicked: board.addingNode = true
+                        PlasmaComponents.ToolTip {
+                            text: "Add a node that mixes applications, or connects this device to others over the network"
+                        }
+                    }
+                }
+            }
+
+            Kirigami.Separator {
+                Layout.fillWidth: true
+                opacity: 0.2
+                visible: fullRoot.selectedRoomIndex >= 0
+            }
+
+            // ── Sound server gone ───────────────────────────────────
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: serverLabel.implicitHeight + Kirigami.Units.smallSpacing * 2
+                visible: !Plasmoid.serverConnected
+                color: Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g,
+                               Kirigami.Theme.negativeTextColor.b, 0.15)
+                PlasmaComponents.Label {
+                    id: serverLabel
+                    anchors.centerIn: parent
+                    text: "The sound server is not reachable — reconnecting…"
+                }
+            }
+
+            // ── Nothing to show ─────────────────────────────────────
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: fullRoot.selectedRoomIndex < 0
+
+                PlasmaExtras.PlaceholderMessage {
+                    anchors.centerIn: parent
+                    width: parent.width - Kirigami.Units.gridUnit * 4
+                    iconName: "audio-volume-high"
+                    text: "Create a room to start"
+                    explanation: "A room remembers which application plays on which output.\nSwitch between rooms to rewire everything at once."
+                    helpfulAction: QQC2.Action {
+                        text: "New Room"
+                        icon.name: "list-add"
+                        onTriggered: roomDialog.openForNew()
+                    }
+                }
+            }
+
+            // ── The board ───────────────────────────────────────────
+            RoutingBoard {
+                id: board
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: fullRoot.selectedRoomIndex >= 0
+
+                roomIndex: fullRoot.selectedRoomIndex
+                roomActive: fullRoot.selectedRoomActive
+                wires: fullRoot.wires
+                nodeColors: fullRoot.nodeColors
+                ghostSources: fullRoot.ghostSources
+                ghostSinks: fullRoot.ghostSinks
+                virtualNodes: fullRoot.virtualNodes
+                sinkModel: Plasmoid.sinkModel ?? null
+                sinkInputModel: Plasmoid.sinkInputModel ?? null
+
+                onNodeSettingsRequested: function(node) {
+                    nodeDialog.openFor(fullRoot.selectedRoomIndex, node, fullRoot.selectedRoomActive)
+                }
+            }
+
+            // ── Volume of the default output ────────────────────────
+            Kirigami.Separator { Layout.fillWidth: true; opacity: 0.2 }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.margins: Kirigami.Units.smallSpacing
+                spacing: Kirigami.Units.smallSpacing
+
+                Kirigami.Icon {
+                    source: fullRoot.masterVolume === 0 ? "audio-volume-muted"
+                          : fullRoot.masterVolume < 40  ? "audio-volume-low"
+                          : fullRoot.masterVolume < 75  ? "audio-volume-medium"
+                          : "audio-volume-high"
+                    Layout.preferredWidth:  Kirigami.Units.iconSizes.small
+                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                    opacity: 0.75
+                }
+                PlasmaComponents.Label {
+                    text: "Default Output"
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    opacity: 0.6
+                }
+                QQC2.Slider {
+                    id: masterSlider
+                    Layout.fillWidth: true
+                    from: 0; to: 150
+                    property int backendVolume: fullRoot.masterVolume
+                    onBackendVolumeChanged: if (!pressed) value = backendVolume
+                    Component.onCompleted: value = backendVolume
+                    onMoved: Plasmoid.setMasterVolume(Math.round(value))
+                }
+                PlasmaComponents.Label {
+                    text: Math.round(masterSlider.value) + "%"
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    opacity: 0.7
+                    horizontalAlignment: Text.AlignRight
+                    Layout.minimumWidth: Kirigami.Units.gridUnit * 2
                 }
             }
         }
     }
 
     // ════════════════════════════════════════════════════════════════════
-    //  ADD ROOM OVERLAY
+    //  Dialogs
     // ════════════════════════════════════════════════════════════════════
-    Rectangle {
-        id: addRoomOverlay
-        visible: false
+    RoomDialog {
+        id: roomDialog
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.55)
         z: 100
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: addRoomOverlay.visible = false
-        }
-
-        Rectangle {
-            id: addRoomDialog
-            anchors.centerIn: parent
-            width: Math.min(parent.width * 0.6, Kirigami.Units.gridUnit * 22)
-            height: addRoomCol.implicitHeight + Kirigami.Units.largeSpacing * 2
-            radius: Kirigami.Units.largeSpacing
-            color: Kirigami.Theme.backgroundColor
-            border.width: 1
-            border.color: Qt.rgba(Kirigami.Theme.textColor.r,
-                                  Kirigami.Theme.textColor.g,
-                                  Kirigami.Theme.textColor.b, 0.15)
-
-            MouseArea { anchors.fill: parent }
-
-            ColumnLayout {
-                id: addRoomCol
-                anchors.fill: parent
-                anchors.margins: Kirigami.Units.largeSpacing
-                spacing: Kirigami.Units.smallSpacing * 2
-
-                property color selectedColor: "#4a90d9"
-                property string selectedIcon: "audio-card"
-
-                readonly property var iconChoices: [
-                    "audio-card", "audio-headphones", "audio-speakers",
-                    "audio-volume-high", "multimedia-player", "audio-headset",
-                    "applications-multimedia", "audio-input-microphone",
-                    "media-playback-start", "media-record"
-                ]
-
-                function createRoomAction() {
-                    if (!fullRoot.groupModel) {
-                        addRoomOverlay.visible = false
-                        return
-                    }
-                    var name = roomNameField.text.trim()
-                    if (name.length === 0) return
-                    var colorStr = "" + addRoomCol.selectedColor
-                    var iconStr = addRoomCol.selectedIcon
-
-                    if (fullRoot.editingRoomIndex >= 0) {
-                        fullRoot.groupModel.updateGroup(fullRoot.editingRoomIndex, name, colorStr, iconStr)
-                    } else {
-                        fullRoot.groupModel.addGroup(name, colorStr, iconStr)
-                    }
-                    roomNameField.text = ""
-                    addRoomCol.selectedColor = "#4a90d9"
-                    addRoomCol.selectedIcon = "audio-card"
-                    fullRoot.editingRoomIndex = -1
-                    addRoomOverlay.visible = false
-                }
-
-                PlasmaExtras.Heading {
-                    level: 3
-                    text: fullRoot.editingRoomIndex >= 0 ? "Edit Room" : "New Room"
-                }
-
-                PlasmaComponents.TextField {
-                    id: roomNameField
-                    Layout.fillWidth: true
-                    placeholderText: "Room name (e.g. Gaming, Streaming, Music)"
-                    font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.05
-                    onAccepted: if (text.trim().length > 0) addRoomCol.createRoomAction()
-                    focus: addRoomOverlay.visible
-                }
-
-                // Color + Icon rows — outer GridLayout for label alignment
-                GridLayout {
-                    Layout.fillWidth: true
-                    columns: 2
-                    columnSpacing: Kirigami.Units.smallSpacing
-                    rowSpacing: Kirigami.Units.smallSpacing * 2
-
-                    // ── Color row ──────────────────────────────────
-                    PlasmaComponents.Label {
-                        text: "Color:"
-                        opacity: 0.8
-                        font.bold: true
-                        Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 3
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Kirigami.Units.smallSpacing
-
-                        Repeater {
-                            model: ["#4a90d9", "#50c878", "#e74c3c", "#f39c12", "#9b59b6", "#1abc9c"]
-                            delegate: Rectangle {
-                                width: 24; height: 24; radius: 12
-                                color: modelData
-                                border.width: ("" + addRoomCol.selectedColor).toLowerCase() === modelData ? 3 : 1
-                                border.color: ("" + addRoomCol.selectedColor).toLowerCase() === modelData
-                                              ? "white"
-                                              : Qt.rgba(Kirigami.Theme.textColor.r,
-                                                        Kirigami.Theme.textColor.g,
-                                                        Kirigami.Theme.textColor.b, 0.2)
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: addRoomCol.selectedColor = modelData
-                                }
-                            }
-                        }
-
-                        KQuickControls.ColorButton {
-                            id: roomColorButton
-                            color: addRoomCol.selectedColor
-                            dialogTitle: "Choose Room Color"
-                            showAlphaChannel: true
-                            onColorChanged: addRoomCol.selectedColor = color
-                            Layout.preferredWidth: 24
-                            Layout.preferredHeight: 24
-                        }
-
-                        Item { Layout.fillWidth: true }
-                    }
-
-                    // ── Icon row ───────────────────────────────────
-                    PlasmaComponents.Label {
-                        text: "Icon:"
-                        opacity: 0.8
-                        font.bold: true
-                        Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 3
-                        topPadding: Kirigami.Units.smallSpacing
-                    }
-
-                    // Use GridLayout (not Grid) so the Layout engine handles sizing correctly
-                    GridLayout {
-                        Layout.fillWidth: true
-                        columns: 5
-                        columnSpacing: Kirigami.Units.smallSpacing
-                        rowSpacing: Kirigami.Units.smallSpacing
-
-                        Repeater {
-                            model: addRoomCol.iconChoices
-                            delegate: Rectangle {
-                                Layout.preferredWidth: 30
-                                Layout.preferredHeight: 30
-                                radius: Kirigami.Units.smallSpacing
-                                color: addRoomCol.selectedIcon === modelData
-                                       ? Qt.rgba(Kirigami.Theme.highlightColor.r,
-                                                 Kirigami.Theme.highlightColor.g,
-                                                 Kirigami.Theme.highlightColor.b, 0.3)
-                                       : (iconMa.containsMouse
-                                          ? Qt.rgba(Kirigami.Theme.highlightColor.r,
-                                                    Kirigami.Theme.highlightColor.g,
-                                                    Kirigami.Theme.highlightColor.b, 0.12)
-                                          : "transparent")
-                                border.width: addRoomCol.selectedIcon === modelData ? 2 : 0
-                                border.color: Kirigami.Theme.highlightColor
-
-                                Kirigami.Icon {
-                                    anchors.centerIn: parent
-                                    source: modelData
-                                    width: Kirigami.Units.iconSizes.small
-                                    height: Kirigami.Units.iconSizes.small
-                                }
-
-                                MouseArea {
-                                    id: iconMa
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: addRoomCol.selectedIcon = modelData
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Item { height: Kirigami.Units.smallSpacing }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-
-                    PlasmaComponents.Button {
-                        text: "Cancel"
-                        onClicked: {
-                            addRoomOverlay.visible = false
-                            roomNameField.text = ""
-                            fullRoot.editingRoomIndex = -1
-                        }
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    PlasmaComponents.Button {
-                        text: fullRoot.editingRoomIndex >= 0 ? "  Save" : "  + Create"
-                        icon.name: fullRoot.editingRoomIndex >= 0 ? "document-save" : "list-add"
-                        enabled: roomNameField.text.trim().length > 0
-                        onClicked: addRoomCol.createRoomAction()
-                        leftPadding: Kirigami.Units.largeSpacing
-                        rightPadding: Kirigami.Units.largeSpacing
-                        topPadding: Kirigami.Units.smallSpacing
-                        bottomPadding: Kirigami.Units.smallSpacing
-
-                        background: Rectangle {
-                            radius: Kirigami.Units.smallSpacing
-                            color: addRoomCol.selectedColor
-                            opacity: parent.enabled ? (parent.hovered ? 1.0 : 0.85) : 0.3
-                        }
-                        contentItem: RowLayout {
-                            spacing: Kirigami.Units.smallSpacing
-                            Kirigami.Icon {
-                                source: fullRoot.editingRoomIndex >= 0 ? "document-save" : "list-add"
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                isMask: true
-                                Kirigami.Theme.textColor: "white"
-                            }
-                            PlasmaComponents.Label {
-                                text: fullRoot.editingRoomIndex >= 0 ? "Save" : "Create"
-                                font.bold: true
-                                color: "white"
-                            }
-                        }
-                    }
-                }
-            }
+        onAccepted: {
+            if (!fullRoot.groupModel) return
+            if (editingRow >= 0)
+                fullRoot.groupModel.updateGroup(editingRow, roomName, "" + roomColor, roomIcon)
+            else
+                fullRoot.groupModel.addGroup(roomName, "" + roomColor, roomIcon)
         }
     }
 
-    // ── Sync selectedRoomIndex when active room changes externally ────
+    NodeDialog {
+        id: nodeDialog
+        anchors.fill: parent
+        z: 100
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Keeping up with the C++ side
+    // ════════════════════════════════════════════════════════════════════
     Connections {
         target: fullRoot.groupModel
-        function onDataChanged(topLeft, bottomRight, roles) {
-            var gm = fullRoot.groupModel
-            if (!gm) return
-            // Only an activation change can move the active room; a rename or
-            // recolor of the viewed room must not pull the selection away.
-            // An empty roles list means "everything may have changed".
-            var activeRole = Qt.UserRole + 5   // GroupListModel::ActiveRole
-            var activeChanged = !roles || roles.length === 0
-            for (var r = 0; !activeChanged && r < roles.length; r++) {
-                if (roles[r] === activeRole) activeChanged = true
-            }
-            if (!activeChanged) return
-            for (var i = 0; i < gm.count; i++) {
-                if (gm.isGroupActive(i) && fullRoot.selectedRoomIndex !== i) {
-                    // selectRoom() also repoints routeModel.groupId, so the
-                    // wires shown always belong to the highlighted room.
-                    fullRoot.selectRoom(i)
-                    break
-                }
-            }
+
+        function onDataChanged() {
+            // If another room was switched on (here, by shortcut, ...), show it
+            var active = Plasmoid.activeRoom()
+            var changed = active !== fullRoot.activeRow
+            fullRoot.refreshRoomState()
+            if (changed && active >= 0 && active !== fullRoot.selectedRoomIndex)
+                fullRoot.selectRoom(active)
         }
-        // Keep selectedRoomIndex pointing at the same room after a removal
-        function onRowsRemoved(parent, first, last) {
-            var sel = fullRoot.selectedRoomIndex
-            if (sel < 0) return
-            if (sel >= first && sel <= last) {
-                // The viewed room is gone — show nothing
-                fullRoot.selectedRoomIndex = -1
-                fullRoot.addingVsink = false
-                if (fullRoot.routeModel) fullRoot.routeModel.groupId = ""
-                fullRoot.connections = []
-                fullRoot.refreshVirtualSinks()
-            } else if (sel > last) {
-                fullRoot.selectedRoomIndex = sel - (last - first + 1)
-            }
+        function onRowsInserted(parent, first, last) {
+            fullRoot.selectRoom(last)      // a new room: show it
         }
-        // Keep selectedRoomIndex correct after drag-reorder
-        function onRowsMoved(parent, start, end, destination, newRow) {
-            var from = start
-            var to = newRow > start ? newRow - 1 : newRow
-            if (fullRoot.selectedRoomIndex === from) {
-                fullRoot.selectedRoomIndex = to
-            } else if (from < to) {
-                if (fullRoot.selectedRoomIndex > from && fullRoot.selectedRoomIndex <= to)
-                    fullRoot.selectedRoomIndex--
-            } else if (from > to) {
-                if (fullRoot.selectedRoomIndex >= to && fullRoot.selectedRoomIndex < from)
-                    fullRoot.selectedRoomIndex++
-            }
-        }
+        function onRowsRemoved() { fullRoot.syncSelection() }
+        function onRowsMoved() { fullRoot.syncSelection() }
+        function onModelReset() { fullRoot.syncSelection() }
     }
 
-    // ── Re-apply routing when new streams appear (debounced from C++) ──
     Connections {
         target: Plasmoid
-        function onReapplyRequested() {
-            fullRoot.handleNewStreams()
-        }
-        function onNextRoomActivated() {
-            fullRoot.selectNextRoom()
-        }
-        function onPrevRoomActivated() {
-            fullRoot.selectPrevRoom()
+        function onConnectionsChanged() { fullRoot.refreshWires() }
+        function onVirtualSinksChanged() {
+            fullRoot.refreshVirtualNodes()
+            fullRoot.refreshWires()
         }
     }
 
-    // ── Keyboard shortcuts (active while popup is open) ───────────
+    // Room switching while the popup has focus (the global shortcuts work
+    // everywhere and are handled in C++)
     Shortcut {
         sequence: "Ctrl+Right"
-        onActivated: fullRoot.selectNextRoom()
+        onActivated: Plasmoid.activateNextRoom()
     }
     Shortcut {
         sequence: "Ctrl+Left"
-        onActivated: fullRoot.selectPrevRoom()
+        onActivated: Plasmoid.activatePrevRoom()
     }
 
-    // Repaint connections when layout changes
-    Timer {
-        id: repaintTimer
-        interval: 100
-        onTriggered: connectionCanvas.requestPaint()
-    }
-
-    onWidthChanged: repaintTimer.restart()
-    onHeightChanged: repaintTimer.restart()
-
-    // Auto-select the first active room when popup opens
-    Component.onCompleted: {
-        if (fullRoot.groupModel) {
-            for (var i = 0; i < fullRoot.groupModel.count; i++) {
-                if (fullRoot.groupModel.isGroupActive(i)) {
-                    fullRoot.selectRoom(i)
-                    return
-                }
-            }
-        }
-    }
+    Component.onCompleted: syncSelection()
 }
