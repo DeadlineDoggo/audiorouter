@@ -1,15 +1,18 @@
 #pragma once
 
 #include <QAbstractListModel>
-#include "audiobackend.h"
+#include "audiotypes.h"
 
 /**
- * @brief Exposes the list of PulseAudio sinks (output devices) to QML.
+ * @brief Exposes the output devices (sinks) to QML.
  *
- * Refreshes automatically when PulseAudioBackend emits sinksChanged().
+ * Sinks SoundRoot creates itself (virtual nodes, combine sinks) are left out:
+ * virtual nodes have their own column, combine sinks are an implementation
+ * detail.
  */
 class SinkModel : public QAbstractListModel {
     Q_OBJECT
+    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
 public:
     enum Roles {
@@ -18,22 +21,23 @@ public:
         DescriptionRole,
         VolumeRole,
         MutedRole,
-        IsVirtualRole
+        IsDefaultRole
     };
 
-    explicit SinkModel(PulseAudioBackend *backend, QObject *parent = nullptr);
+    explicit SinkModel(AudioBackend *backend, QObject *parent = nullptr);
 
     int      rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    Q_INVOKABLE QString sinkNameAt(int row) const;
-    Q_INVOKABLE QString sinkDescriptionAt(int row) const;
+signals:
+    void countChanged();
 
 public slots:
     void refresh();
 
 private:
-    PulseAudioBackend   *m_backend;
+    AudioBackend        *m_backend;
     QVector<PASinkInfo>  m_sinks;
+    QString              m_defaultSink;
 };

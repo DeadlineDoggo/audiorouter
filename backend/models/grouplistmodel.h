@@ -1,13 +1,16 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QHash>
 #include "data/audiogroup.h"
 
 /**
- * @brief Qt list model exposing audio groups to QML.
+ * @brief Qt list model exposing the rooms to QML, and owner of the persisted
+ *        configuration.
  *
- * Supports add / remove / toggle-active operations and persists changes
- * automatically via Settings.
+ * Rooms are edited through this model (name, colour, order) and through the
+ * routing engine (wires, virtual nodes), which calls save() and
+ * notifyLinksChanged() after changing a room.
  */
 class GroupListModel : public QAbstractListModel {
     Q_OBJECT
@@ -20,7 +23,7 @@ public:
         ColorRole,
         IconRole,
         ActiveRole,
-        RouteCountRole
+        LinkCountRole
     };
 
     explicit GroupListModel(QObject *parent = nullptr);
@@ -32,30 +35,40 @@ public:
 
     // ── Invokable from QML ──────────────────────────────────────────────
     Q_INVOKABLE void    addGroup(const QString &name, const QString &color, const QString &icon = QStringLiteral("audio-card"));
-    Q_INVOKABLE void    removeGroup(int row);
     Q_INVOKABLE void    moveGroup(int from, int to);
-    Q_INVOKABLE void    toggleActive(int row);
     Q_INVOKABLE QString groupId(int row) const;
+    Q_INVOKABLE QString groupName(int row) const;
+    Q_INVOKABLE QString groupColor(int row) const;
     Q_INVOKABLE bool    isGroupActive(int row) const;
     Q_INVOKABLE void    updateGroup(int row, const QString &name, const QString &color, const QString &icon);
 
-    /// Set active without toggle; emits dataChanged from within the model.
+    // ── C++ only ────────────────────────────────────────────────────────
+    /// Rooms are removed through the applet, which deactivates them first.
+    void removeGroup(int row);
     void setGroupActive(int row, bool active);
+    /// Row of the active room, or -1.
+    int  activeRow() const;
+    int  rowOfId(const QString &id) const;
 
-    // ── C++ convenience ─────────────────────────────────────────────────
     AudioGroup       *groupAt(int row);
     const AudioGroup *groupAt(int row) const;
     AudioGroup       *groupById(const QString &id);
 
+    /// A room's wires changed: refresh its link count in the views.
+    void notifyLinksChanged(int row);
+
+    /// Remember a sink's description so it can be named while unplugged.
+    /// Returns true when the stored label changed (the caller saves).
+    bool    rememberSinkLabel(const QString &sinkName, const QString &description);
+    QString sinkLabel(const QString &sinkName) const;
+
     void load();
     void save();
 
-    QVector<AudioGroup> &groups() { return m_groups; }
-
 signals:
     void countChanged();
-    void groupChanged(int row);
 
 private:
-    QVector<AudioGroup> m_groups;
+    QVector<AudioGroup>     m_groups;
+    QHash<QString, QString> m_sinkLabels;
 };

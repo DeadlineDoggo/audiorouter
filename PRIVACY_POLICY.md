@@ -56,7 +56,8 @@ Within this repository implementation, SoundRoot does not intentionally:
 
 - Send analytics or telemetry to external servers
 - Upload routing configuration to cloud services
-- Record microphone content or audio samples
+- Record microphone content
+- Record or transmit audio, with one exception that you control: a *network node*. If you enable "Share over the local network" on a virtual node, the audio that applications play into that node is sent, encrypted, to the other devices on your local network that use the same channel name and passphrase, for as long as the node's room is switched on. Nothing is sent to any server and nothing leaves the local network. See `PRIVACY_AND_PERMISSIONS.md`, section 1.4.
 
 ## 5. Legal basis and control
 
