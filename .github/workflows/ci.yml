@@ -1,0 +1,77 @@
+name: CI
+
+# Build and test on every push to main and every pull request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # SoundRoot is a Plasma 6 plugin, so it is built where Plasma 6 is packaged:
+    # one distribution per plugin-folder layout (lib, lib/<triplet>, lib64).
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Arch Linux
+            image: archlinux:latest
+            setup: >-
+              pacman -Syu --noconfirm --needed
+              base-devel git cmake ninja extra-cmake-modules
+              qt6-base qt6-declarative libplasma
+              kcoreaddons kconfig kpackage kglobalaccel ki18n kxmlgui
+              libpulse libsodium
+          - name: Debian 13
+            image: debian:trixie
+            setup: >-
+              apt-get update && apt-get install -y --no-install-recommends
+              build-essential git ca-certificates cmake ninja-build pkgconf gettext extra-cmake-modules
+              qt6-base-dev qt6-declarative-dev libplasma-dev
+              libkf6coreaddons-dev libkf6config-dev libkf6package-dev libkf6globalaccel-dev
+              libkf6i18n-dev libkf6xmlgui-dev
+              libpulse-dev libsodium-dev
+          - name: Fedora
+            image: fedora:latest
+            setup: >-
+              dnf install -y
+              gcc-c++ git cmake ninja-build extra-cmake-modules
+              qt6-qtbase-devel qt6-qtdeclarative-devel libplasma-devel
+              kf6-kcoreaddons-devel kf6-kconfig-devel kf6-kpackage-devel kf6-kglobalaccel-devel
+              kf6-ki18n-devel kf6-kxmlgui-devel
+              pulseaudio-libs-devel libsodium-devel
+
+    steps:
+      - name: Install dependencies
+        run: ${{ matrix.setup }}
+
+      - uses: actions/checkout@v4
+
+      - name: Build (warnings are errors)
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wshadow -Werror -Wno-error=deprecated-declarations"
+          cmake --build build
+
+      # The tests need neither a sound server nor Plasma.
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      # Plasma only finds the plugin if the folder the installer records is the
+      # folder the plugin was installed to. That folder differs per distribution,
+      # and getting it wrong is silent: the widget loads without its backend.
+      - name: Installer records the right plugin folder
+        run: |
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+          BUILD_DIR="$RUNNER_TEMP/install-build" bash install-local.sh
+          recorded="$(sed -n 's/^QT_PLUGIN_PATH=\([^:]*\):.*/\1/p' "$HOME/.config/environment.d/50-soundroot.conf")"
+          echo "recorded plugin folder: $recorded"
+          test -f "$recorded/plasma/applets/org.kde.plasma.soundroot.so"
+          test -f "$HOME/.local/share/plasma/plasmoids/org.kde.plasma.soundroot/metadata.json"
