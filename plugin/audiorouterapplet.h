@@ -2,35 +2,34 @@
 
 #include <Plasma/Applet>
 #include <KGlobalAccel>
-#include <QTimer>
 #include <QVariantList>
 
 #include "audiobackend.h"
 #include "models/grouplistmodel.h"
-#include "models/routelistmodel.h"
 #include "models/sinkinputmodel.h"
 #include "models/sinkmodel.h"
+#include "net/netengine.h"
+#include "routing/routingengine.h"
 
 /**
- * @brief C++ backend for the Audio Router plasmoid.
+ * @brief The SoundRoot plasmoid's C++ side.
  *
- * Extends Plasma::Applet so Plasma loads it automatically when the widget
- * is added to a panel. QML accesses this object as `plasmoid` and can
- * reach the models/actions through properties defined here.
- *
- * Usage in QML:
- *   Plasmoid.nativeInterface.groupModel
- *   Plasmoid.nativeInterface.applyGroup(index)
+ * Plasma creates this when the widget is added to a panel; QML reaches it
+ * through the `Plasmoid` attached object.  It owns the sound-server backend,
+ * the routing engine and the network engine, and is a thin, QML-facing layer
+ * over them: all state and all routing decisions live in C++, so they work
+ * whether or not the popup has ever been opened.
  */
 class AudioRouterApplet : public Plasma::Applet {
     Q_OBJECT
 
     // Models exposed to QML
     Q_PROPERTY(GroupListModel*  groupModel      READ groupModel      CONSTANT)
-    Q_PROPERTY(RouteListModel*  routeModel      READ routeModel      CONSTANT)
     Q_PROPERTY(SinkModel*       sinkModel       READ sinkModel       CONSTANT)
     Q_PROPERTY(SinkInputModel*  sinkInputModel  READ sinkInputModel  CONSTANT)
     Q_PROPERTY(int masterVolume READ masterVolume NOTIFY masterVolumeChanged)
+    /// False while the sound server is unreachable.
+    Q_PROPERTY(bool serverConnected READ serverConnected NOTIFY serverConnectedChanged)
     // Per-action shortcuts, read/write directly via KGlobalAccel — same pattern as Plasmoid.globalShortcut
     Q_PROPERTY(QKeySequence nextRoomShortcut READ nextRoomShortcut WRITE setNextRoomShortcut NOTIFY nextRoomShortcutChanged)
     Q_PROPERTY(QKeySequence prevRoomShortcut READ prevRoomShortcut WRITE setPrevRoomShortcut NOTIFY prevRoomShortcutChanged)
@@ -43,59 +42,73 @@ public:
 
     // ── Property accessors ──────────────────────────────────────────────
     GroupListModel  *groupModel()     { return &m_groupModel; }
-    RouteListModel  *routeModel()     { return &m_routeModel; }
     SinkModel       *sinkModel()      { return &m_sinkModel; }
     SinkInputModel  *sinkInputModel() { return &m_sinkInputModel; }
     int              masterVolume()   const { return m_audioBackend.defaultSinkVolume(); }
+    bool             serverConnected() const { return m_audioBackend.isConnected(); }
     QKeySequence     nextRoomShortcut() const;
     void             setNextRoomShortcut(const QKeySequence &seq);
     QKeySequence     prevRoomShortcut() const;
     void             setPrevRoomShortcut(const QKeySequence &seq);
 
-    // ── QML-invokable actions ───────────────────────────────────────────
-    Q_INVOKABLE void applyGroup(int groupIndex);
-    Q_INVOKABLE void deactivateGroup(int groupIndex);
-    Q_INVOKABLE void applyAllActiveGroups();
+    // ── Rooms ───────────────────────────────────────────────────────────
+    /// Make a room the active one (the previously active room is switched off).
+    Q_INVOKABLE void activateRoom(int row);
+    Q_INVOKABLE void deactivateRoom(int row);
+    Q_INVOKABLE void removeRoom(int row);
+    Q_INVOKABLE void activateNextRoom();
+    Q_INVOKABLE void activatePrevRoom();
+    /// Row of the active room, or -1.
+    Q_INVOKABLE int  activeRoom() const;
+
+    // ── Wires (see RoutingEngine for the node key format) ───────────────
+    Q_INVOKABLE bool canConnect(int row, const QString &a, const QString &b) const;
+    Q_INVOKABLE bool connectNodes(int row, const QString &a, const QString &b);
+    Q_INVOKABLE void disconnectNodes(int row, const QString &a, const QString &b);
+    Q_INVOKABLE void disconnectNode(int row, const QString &key);
+    Q_INVOKABLE void clearRoom(int row);
+    Q_INVOKABLE QVariantList roomConnections(int row);
+    Q_INVOKABLE QVariantList offlineSources(int row);
+    Q_INVOKABLE QVariantList offlineSinks(int row);
+
+    // ── Volumes ─────────────────────────────────────────────────────────
     Q_INVOKABLE void setMasterVolume(int percent);
     Q_INVOKABLE void setSinkVolumeByName(const QString &sinkName, int percent);
     Q_INVOKABLE void toggleSinkMute(const QString &sinkName);
-    /// Direct per-stream move: PA sinkInputIndex → named sink.
-    Q_INVOKABLE void moveInput(int inputIndex, const QString &sinkName);
-    /// Route a specific stream to one or more sinks (combine-sink for multi).
-    Q_INVOKABLE void routeStreamToSinks(int inputIndex, const QStringList &sinkNames);
-    /// Set the volume of a specific stream by its PA index (0-150%).
     Q_INVOKABLE void setSinkInputVolume(int inputIndex, int percent);
 
-    // ── Virtual sink management ────────────────────────────────────────
-    /// Add a new virtual null-sink to a room. Returns the generated PA name.
-    Q_INVOKABLE QString addVirtualSink(int groupIndex, const QString &displayName);
-    /// Remove (and destroy if active) a virtual sink from a room.
-    Q_INVOKABLE void removeVirtualSink(int groupIndex, const QString &paName);
-    /// Returns [{displayName, paName, loopbackTargets:[...]}] for QML.
-    Q_INVOKABLE QVariantList groupVirtualSinks(int groupIndex) const;
-    /// Update the real-sink loopback targets of a virtual sink in a room.
-    Q_INVOKABLE void setVirtualSinkLoopbackTargets(int groupIndex,
-                                                   const QString &paName,
-                                                   const QStringList &targets);
+    // ── Virtual and network nodes ───────────────────────────────────────
+    /// Add a virtual node to a room. Returns the generated PA name.
+    Q_INVOKABLE QString addVirtualSink(int row, const QString &displayName);
+    Q_INVOKABLE void removeVirtualSink(int row, const QString &paName);
+    /// [{displayName, paName, loopbackTargets, networkEnabled, channel,
+    ///   passphrase, staticPeers}]
+    Q_INVOKABLE QVariantList groupVirtualSinks(int row) const;
+    /// Change name and network settings of a node; see RoutingEngine.
+    Q_INVOKABLE void configureVirtualSink(int row, const QString &paName,
+                                          const QVariantMap &config);
+    /// {state, error, port, peers: [{name, address, listening}]} of a
+    /// running network node; empty when it is not running.
+    Q_INVOKABLE QVariantMap networkStatus(const QString &paName) const;
+    Q_INVOKABLE QString generatePassphrase() const;
+
 signals:
-    void nextRoomActivated();
-    void prevRoomActivated();
     void masterVolumeChanged(int volumePercent);
+    void serverConnectedChanged();
     void nextRoomShortcutChanged();
     void prevRoomShortcutChanged();
-    /// Emitted when a new stream appears while a room is active.
-    /// QML should rebuild connections from model and re-apply routing.
-    void reapplyRequested();
+    /// The wires, ghost nodes or stream bindings of some room changed.
+    void connectionsChanged();
+    void virtualSinksChanged();
+    void networkStatusChanged(const QString &paName);
 
 private:
-    void setupConnections();
-
+    NetEngine          m_netEngine;      // first: outlives everything that uses it
     PulseAudioBackend  m_audioBackend;
     GroupListModel     m_groupModel;
-    RouteListModel     m_routeModel;
     SinkModel          m_sinkModel;
     SinkInputModel     m_sinkInputModel;
-    QTimer             m_reapplyTimer;
+    RoutingEngine      m_engine;
     QAction           *m_nextAction = nullptr;
     QAction           *m_prevAction = nullptr;
 };
