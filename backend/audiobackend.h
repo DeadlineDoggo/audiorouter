@@ -1,156 +1,109 @@
 #pragma once
 
+#include <QHash>
 #include <QMap>
 #include <QMutex>
-#include <QObject>
 #include <QSet>
 #include <QVector>
 
+#include <atomic>
+#include <functional>
+
 #include <pulse/pulseaudio.h>
 
-// ── Lightweight structs exposed to the rest of the app ──────────────────────
-
-struct PASinkInfo {
-    uint32_t index = PA_INVALID_INDEX;
-    QString  name;          ///< PulseAudio internal name
-    QString  description;   ///< Human-readable description
-    int      volumePercent = 100; ///< Current output volume (0-150)
-    uint8_t  channels = 2;       ///< Channel count for volume operations
-    bool     isMuted = false;     ///< Whether the sink is muted
-};
-
-struct PASinkInputInfo {
-    uint32_t index     = PA_INVALID_INDEX;
-    QString  appName;       ///< Application name (PA_PROP_APPLICATION_NAME)
-    QString  mediaName;     ///< Media being played
-    uint32_t sinkIndex = PA_INVALID_INDEX; ///< Currently routed sink
-    QString  iconName;      ///< Freedesktop icon name of the app
-    uint8_t  channels = 2;  ///< Stream channel count for volume operations
-    int      volumePercent = 100; ///< Current stream volume (0-150%)
-};
-
-// ── PulseAudio backend ─────────────────────────────────────────────────────
+#include "audiotypes.h"
 
 /**
  * @brief Async wrapper around the PulseAudio threaded-mainloop API.
  *
  * Provides live lists of sinks (output devices) and sink-inputs (application
- * audio streams), and methods to move streams between sinks or create
- * combined sinks for multi-output routing.
+ * audio streams) and the primitives the routing engine builds on: moving a
+ * stream, combine-sinks, virtual null-sinks with loopbacks, and the record /
+ * playback streams of network nodes.
  *
- * Works transparently on PipeWire installations that expose the PulseAudio
- * compatibility layer.
+ * Works on PipeWire through its PulseAudio compatibility layer.
+ *
+ * If the sound server goes away (restart, crash, update) the backend drops
+ * everything it knew, reconnects, and emits serverConnected() again so the
+ * engine can rebuild its state.
+ *
+ * Locking: the PulseAudio mainloop lock is always taken BEFORE m_mutex,
+ * never the other way round (the PA callbacks run with the mainloop lock
+ * held and then take m_mutex).
  */
-class PulseAudioBackend : public QObject {
+class PulseAudioBackend : public AudioBackend {
     Q_OBJECT
 
 public:
     explicit PulseAudioBackend(QObject *parent = nullptr);
     ~PulseAudioBackend() override;
 
+    /// Where network node audio goes to / comes from.  Set before initialize().
+    void setAudioTap(AudioTap *tap) { m_tap = tap; }
+
     void initialize();
     void shutdown();
 
-    bool isConnected() const { return m_connected; }
+    // ── AudioBackend ────────────────────────────────────────────────────
+    bool isConnected() const override { return m_connected; }
+    QVector<PASinkInfo>      availableSinks() const override;
+    QVector<PASinkInputInfo> availableSinkInputs() const override;
+    QString                  defaultSinkName() const override;
 
-    // ── Queries (thread-safe, return copies) ────────────────────────────
-    QVector<PASinkInfo>      availableSinks()      const;
-    QVector<PASinkInputInfo> availableSinkInputs() const;    int                      defaultSinkVolume()   const;
-    // ── Actions ─────────────────────────────────────────────────────────
-    void moveSinkInput(uint32_t sinkInputIndex, uint32_t sinkIndex);
-    void setSinkInputVolume(uint32_t sinkInputIndex,
-                            int volumePercent,
-                            uint8_t channels = 2);
+    void moveSinkInput(uint32_t sinkInputIndex, uint32_t sinkIndex) override;
 
-    /// Load a module-combine-sink that merges several sinks into one.
-    void createCombinedSink(const QString &name, const QStringList &sinkNames);
-    void destroyCombinedSink(const QString &name);
+    void createCombinedSink(const QString &name, const QStringList &sinkNames) override;
+    void destroyCombinedSink(const QString &name) override;
 
-    /// High-level: route an application (by name) to one or more outputs.
-    /// Streams keep their current volume.
-    void applyRoute(const QString &appName,
-                    const QStringList &outputSinkNames);
-    void removeRoute(const QString &appName);
+    void createVirtualSink(const QString &paName, const QString &displayName) override;
+    void destroyVirtualSink(const QString &paName) override;
+    void setVirtualSinkLoopbacks(const QString &paName, const QStringList &targetSinks) override;
 
-    /// Move all streams from appName back to the default sink.
-    void restoreRoute(const QString &appName);
+    void openNetworkCapture(const QString &paName) override;
+    void closeNetworkCapture(const QString &paName) override;
+    void openNetworkPlayback(const QString &paName, const QString &sinkName) override;
+    void closeNetworkPlayback(const QString &paName) override;
 
+    // ── Volume controls ─────────────────────────────────────────────────
+    int  defaultSinkVolume() const;
+    void setSinkInputVolume(uint32_t sinkInputIndex, int volumePercent);
     /// Set the volume of the default output sink (0–150%).
     void setDefaultSinkVolume(int percent);
-
     /// Set the volume of a specific sink by its PA name (0–150%).
     void setSinkVolumeByName(const QString &sinkName, int percent);
-
-    /// Toggle mute state of a specific sink by name.
     void toggleSinkMuteByName(const QString &sinkName);
 
-    /// Move a specific sink-input (by PA index) to a named sink.
-    void moveInputToSink(uint32_t sinkInputIndex, const QString &sinkName);
-
-    /// Route a specific sink-input to one or more sinks.
-    /// Creates a combine-sink when multiple sinks are specified.
-    void routeStreamToSinks(uint32_t sinkInputIndex, const QStringList &sinkNames,
-                            int volumePercent = 100);
-
-    /// Destroy all per-stream combine sinks (audiorouter_stream_*).
-    void cleanupStreamCombineSinks();
-
-    // ── Virtual null-sink / loopback management ──────────────────────────
-    // All of these are idempotent: they record the desired state and only
-    // load/unload the modules needed to reach it.  Module loads that finish
-    // after their key stopped being wanted are unloaded in the callback.
-
-    /// Load a module-null-sink with the given PA name and user-visible description.
-    /// No-op if it is already loaded or loading.
-    void createVirtualSink(const QString &paName, const QString &displayName);
-    /// Unload the virtual null-sink and all loopbacks attached to it.
-    void destroyVirtualSink(const QString &paName);
-    /// Set the loopbacks routing virtualSink.monitor → each target.  Only the
-    /// difference to the current set is loaded/unloaded.  Loopbacks requested
-    /// before the null-sink finished loading are created once it is ready.
-    void setVirtualSinkLoopbacks(const QString &paName, const QStringList &targetSinks);
-    /// Destroy all virtual sinks (and their loopbacks). Called on shutdown/deactivate.
-    void destroyAllVirtualSinks();
-
 signals:
-    void sinksChanged();
-    void sinkInputsChanged();
-    /// Emitted only when a truly new stream appears (not on move/volume change).
-    void sinkInputAdded();
-    void serverConnected();
-    void serverDisconnected();
     /// Emitted whenever the default sink’s volume changes.
     void defaultSinkVolumeChanged(int volumePercent);
-    /// Emitted when one of our virtual null-sinks shows up in the sink list,
-    /// so streams routed to it can be (re)applied.
-    void virtualSinkAppeared();
-    void errorOccurred(const QString &message);
 
 private:
-    // ── Internal refresh helpers (must be called with PA lock held) ──────
+    struct NetStream;
+
+    // ── Internal helpers (PA lock held) ─────────────────────────────────
     void refreshSinksLocked();
     void refreshSinkInputsLocked();
-
-    // ── Virtual sink helpers (must be called with PA lock held) ─────────
     void unloadModuleLocked(uint32_t moduleIndex);
     /// Load every wanted loopback of paName that is neither loaded nor loading.
     void loadMissingLoopbacksLocked(const QString &paName);
     /// Start a module-combine-sink load.  The caller has already recorded it
     /// in m_pendingCombined.
     void loadCombinedLocked(const QString &name, const QStringList &sinkNames);
+    void closeStreamLocked(QHash<QString, NetStream *> &streams, const QString &paName);
+    /// Remember heap data handed to a PA callback, so it can be freed if the
+    /// connection dies before the callback runs.
+    void trackUserdata(void *data, std::function<void()> deleter);
+    void untrackUserdata(void *data);
 
-    // ── Public-facing refresh (acquires PA lock) ────────────────────────
-    void refreshSinks();
-    void refreshSinkInputs();
+    void setSinkVolume(const QString &sinkName, int percent);
+    /// Stop the mainloop and free every PA object.  Not under the PA lock.
+    void teardown();
+    /// Try to connect again after a (growing) pause.
+    void scheduleReconnect();
+    Q_INVOKABLE void handleServerLost(quintptr deadContext);
+    Q_INVOKABLE void handleStreamEnded(quintptr stream);
 
-    /// Move collected sink-inputs to a combined sink, with retry logic.
-    /// A negative volumePercent leaves the streams' volume untouched.
-    void moveSinkInputsToCombined(const QString &combinedName,
-                                  const QVector<QPair<uint32_t, uint8_t>> &sinkInputs,
-                                  int volumePercent,
-                                  int retryCount);
-
-    // ── PulseAudio static callbacks ─────────────────────────────────────
+    // ── PulseAudio static callbacks (PA thread, mainloop lock held) ──────
     static void contextStateCallback(pa_context *c, void *userdata);
     static void subscribeCallback(pa_context *c,
                                   pa_subscription_event_type_t t,
@@ -168,35 +121,39 @@ private:
     static void virtualModuleLoadCallback(pa_context *c, uint32_t idx, void *userdata);
     static void successCallback(pa_context *c, int success, void *userdata);
     static void unloadModuleCallback(pa_context *c, int success, void *userdata);
+    static void streamStateCallback(pa_stream *s, void *userdata);
+    static void streamReadCallback(pa_stream *s, size_t nbytes, void *userdata);
+    static void streamWriteCallback(pa_stream *s, size_t nbytes, void *userdata);
 
     // ── Members ─────────────────────────────────────────────────────────
     pa_threaded_mainloop *m_mainloop = nullptr;
     pa_context           *m_context  = nullptr;
+    AudioTap             *m_tap      = nullptr;
 
     mutable QMutex              m_mutex;
     QVector<PASinkInfo>         m_sinks;
     QVector<PASinkInputInfo>    m_sinkInputs;
     QMap<QString, uint32_t>     m_combinedModules;   // name → module index
-    QMap<QString, QStringList>   m_combinedSlaves;    // name → DESIRED slave sink names (absent = not wanted)
-    QMap<QString, QStringList>   m_pendingCombined;   // name → slaves of the load in flight (at most one per name)
-    // Virtual sinks / loopbacks (only touched with the PA mainloop lock held)
+    QMap<QString, QStringList>  m_combinedSlaves;    // name → DESIRED slave sink names (absent = not wanted)
+    QMap<QString, QStringList>  m_pendingCombined;   // name → slaves of the load in flight (at most one per name)
+    QString  m_defaultSinkName;            // guarded by m_mutex
+    int      m_defaultSinkVolume = 100;    // guarded by m_mutex
+
+    // Everything below is only touched with the PA mainloop lock held
     QMap<QString, uint32_t>     m_virtualSinkModules; // paName → module index
     QMap<QString, uint32_t>     m_loopbackModules;   // "paName|sinkName" → module index
     QSet<QString>               m_wantedVirtualSinks; // desired paNames
     QSet<QString>               m_wantedLoopbacks;    // desired "paName|sinkName"
     QSet<QString>               m_pendingVirtualLoads; // keys of either kind with a load in flight
-    int                         m_pendingUnloads = 0; // unload ops issued, not yet confirmed (PA lock)
-    static constexpr int        kShutdownWaitMs = 1500; // max wait for module cleanup on exit
+    int                         m_pendingUnloads = 0; // unload ops issued, not yet confirmed
+    QHash<QString, NetStream *> m_captureStreams;     // paName → record stream
+    QHash<QString, NetStream *> m_playbackStreams;    // paName → playback stream
+    QHash<QString, qint64>      m_streamFailures;     // "c|paName" / "p|paName" → time of last failure
+    QHash<void *, std::function<void()>> m_userdata;  // callback data not yet delivered
 
-    // Pending buffers for atomic refresh (only accessed from PA thread)
+    // Pending buffers for atomic refresh
     QVector<PASinkInfo>         m_pendingSinks;
     QVector<PASinkInputInfo>    m_pendingSinkInputs;
-
-    // Set from PA thread (subscribeCallback) when a NEW sink-input event arrives.
-    // Read and cleared in sinkInputInfoCallback(eol). Never needs a mutex since
-    // both callers run on the PA mainloop thread.
-    bool     m_hasNewSinkInput  = false;
-    int      m_lastSinkInputCount = 0;  // post-filter count for detecting real new streams
 
     // Generation counters – bumped each time a new enumeration starts.  Each
     // request carries its generation in its userdata; results from an older,
@@ -204,8 +161,14 @@ private:
     uint64_t m_sinkInputGen     = 0;
     uint64_t m_sinkGen          = 0;
 
-    QString  m_defaultSinkName;            // guarded by m_mutex
-    int      m_defaultSinkVolume = 100;    // guarded by m_mutex
+    static constexpr int kShutdownWaitMs = 1500; // max wait for module cleanup on exit
+    static constexpr int kReconnectDelayMs = 1000;
+    static constexpr int kMaxReconnectDelayMs = 5000;
+    static constexpr int kStreamRetryMs = 2000;  // pause after a network stream failed
 
-    bool m_connected = false;
+    std::atomic<bool> m_connected { false };
+    std::atomic<bool> m_everConnected { false };       // the current context reached READY
+    std::atomic<bool> m_reportedUnreachable { false }; // warned about the outage already
+    std::atomic<int>  m_reconnectDelayMs { kReconnectDelayMs };
+    bool m_shuttingDown = false;
 };
