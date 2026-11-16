@@ -25,6 +25,12 @@ PlasmaExtras.Representation {
     readonly property var groupModel: Plasmoid.groupModel ?? null
     readonly property int masterVolume: Plasmoid.masterVolume ?? 100
 
+    /// Plasma loaded this interface but not the compiled plugin behind it
+    /// (it is not installed, or its folder is not on QT_PLUGIN_PATH).  Then
+    /// `Plasmoid` is a plain applet without any of SoundRoot's properties and
+    /// nothing here can work - say so instead of showing a dead interface.
+    readonly property bool backendMissing: Plasmoid.groupModel === undefined
+
     // ── Which room is shown ─────────────────────────────────────────
     // Tracked by id: rows shift when rooms are reordered or removed.
     property string selectedRoomId: ""
@@ -137,6 +143,7 @@ PlasmaExtras.Representation {
     RowLayout {
         anchors.fill: parent
         spacing: 0
+        visible: !fullRoot.backendMissing
 
         RoomSidebar {
             Layout.fillHeight: true
@@ -342,6 +349,56 @@ PlasmaExtras.Representation {
     }
 
     // ════════════════════════════════════════════════════════════════════
+    //  The plugin is not loaded
+    // ════════════════════════════════════════════════════════════════════
+    ColumnLayout {
+        anchors.centerIn: parent
+        width: Math.min(parent.width - Kirigami.Units.gridUnit * 4, Kirigami.Units.gridUnit * 40)
+        visible: fullRoot.backendMissing
+        spacing: Kirigami.Units.largeSpacing
+
+        Kirigami.Icon {
+            source: "dialog-warning"
+            Layout.alignment: Qt.AlignHCenter
+            Layout.preferredWidth: Kirigami.Units.iconSizes.huge
+            Layout.preferredHeight: Kirigami.Units.iconSizes.huge
+        }
+        PlasmaExtras.Heading {
+            level: 2
+            text: "SoundRoot's plugin is not loaded"
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+        }
+        PlasmaComponents.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+            text: "This is only the interface. The part that routes audio is a compiled plugin, and Plasma did not find it - so rooms cannot be created or applied."
+        }
+        PlasmaComponents.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            textFormat: Text.StyledText
+            text: "<b>Installed from the KDE Store or a .plasmoid file?</b> Those contain the interface only. Download the <tt>.tar.gz</tt> from the project's releases, unpack it and run <tt>bash install-local.sh</tt>."
+        }
+        PlasmaComponents.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            textFormat: Text.StyledText
+            text: "<b>Already ran install-local.sh?</b> Plasma was started before it knew where the plugin is. Log out and back in, or run the restart command the script printed at the end."
+        }
+        // Selectable, so it can be copied
+        QQC2.TextField {
+            Layout.fillWidth: true
+            readOnly: true
+            selectByMouse: true
+            horizontalAlignment: Text.AlignHCenter
+            text: "https://github.com/DeadlineDoggo/audiorouter#troubleshooting"
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     //  Dialogs
     // ════════════════════════════════════════════════════════════════════
     RoomDialog {
@@ -398,10 +455,12 @@ PlasmaExtras.Representation {
     // everywhere and are handled in C++)
     Shortcut {
         sequence: "Ctrl+Right"
+        enabled: !fullRoot.backendMissing
         onActivated: Plasmoid.activateNextRoom()
     }
     Shortcut {
         sequence: "Ctrl+Left"
+        enabled: !fullRoot.backendMissing
         onActivated: Plasmoid.activatePrevRoom()
     }
 
