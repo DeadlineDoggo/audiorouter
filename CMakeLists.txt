@@ -9,6 +9,10 @@ set(CMAKE_AUTOMOC ON)
 find_package(ECM REQUIRED NO_MODULE)
 set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
 
+# With -DKDE_INSTALL_USE_QT_SYS_PATHS=ON (distribution packages) the plugin goes
+# to Qt's own plugin folder, e.g. /usr/lib/qt6/plugins; that needs the Qt major
+# version before KDEInstallDirs is read.
+set(QT_MAJOR_VERSION 6)
 include(KDEInstallDirs)
 include(KDECMakeSettings)
 include(KDECompilerSettings NO_POLICY_SCOPE)
