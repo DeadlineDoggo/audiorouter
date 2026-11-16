@@ -46,15 +46,9 @@ cd soundroot-*
 bash install-local.sh
 ```
 
-Then restart Plasma and add the widget:
+The script builds SoundRoot, installs it into `~/.local`, and ends by printing the command that restarts Plasma so it loads the new plugin. Run that command (or log out and back in), then right-click your panel → **Add Widgets** → search **SoundRoot** → drag to panel.
 
-```bash
-kquitapp6 plasmashell && kstart6 plasmashell
-```
-
-Right-click your panel → **Add Widgets** → search **SoundRoot** → drag to panel.
-
-> **Note:** The `.plasmoid` file (also available in Releases) only installs the QML layer — audio routing will not work without the C++ backend. Use the `.tar.gz` + `install-local.sh` path for full functionality.
+> **Note:** SoundRoot has two parts: the interface and a compiled plugin that does the audio routing. The `.plasmoid` file and the KDE Store's "Get New Widgets" can only deliver the interface. Without the plugin the widget shows a notice and cannot create rooms — use the `.tar.gz` + `install-local.sh`. See [Troubleshooting](#troubleshooting).
 
 ### Build from Source
 
@@ -64,13 +58,7 @@ cd audiorouter
 bash install-local.sh
 ```
 
-Then restart Plasma and add the widget:
-
-```bash
-kquitapp6 plasmashell && kstart6 plasmashell
-```
-
-Right-click your panel → **Add Widgets** → search **SoundRoot** → drag to panel.
+Then restart Plasma with the command the script prints (or log out and back in) and add the widget as above.
 
 **Dependencies:** CMake, Extra CMake Modules, Qt 6 (Core, Gui, Quick, Network; Test for the tests), KDE Frameworks 6, libplasma, libpulse, libsodium, and PipeWire with pipewire-pulse (or PulseAudio) at run time.
 
@@ -107,6 +95,39 @@ Keyboard shortcuts can be configured in the widget's settings, or in **System Se
 
 A network node connects SoundRoot on several devices: what is played into the node on one device comes out of the node on the others. Give the nodes the same channel name and passphrase. Audio is encrypted; the devices must reach each other over UDP ports 47780–47781, which many firewalls block by default. See [docs/NETWORK_NODES.md](docs/NETWORK_NODES.md).
 
+## Troubleshooting
+
+### "SoundRoot's plugin is not loaded" / rooms cannot be created
+
+Plasma found the interface but not the compiled plugin. (Versions up to 0.8.1 did not say so: "New Room" simply did nothing.) The usual causes:
+
+- **Installed from the KDE Store or a `.plasmoid` file.** Those contain only the interface. Install from the `.tar.gz` with `install-local.sh`.
+- **Plasma was not restarted the right way after installing.** Plasma looks for plugins in the folders listed in `QT_PLUGIN_PATH`. The installer records the folder for future logins, so logging out and back in always works. To avoid that, use the restart command the installer prints — a plain `kquitapp6 plasmashell; kstart plasmashell` starts Plasma with the old environment.
+- **Installed with 0.8.1 or older on Debian, Ubuntu, KDE neon, Fedora or openSUSE.** Those put the plugin in `~/.local/lib/x86_64-linux-gnu/plugins` or `~/.local/lib64/plugins`, but the old installer always recorded `~/.local/lib/plugins`. Run the current `install-local.sh` again; it records the folder the plugin really went to.
+
+To check by hand:
+
+```bash
+find ~/.local -name 'org.kde.plasma.soundroot.so'       # where the plugin is
+cat ~/.config/environment.d/50-soundroot.conf           # the folder Plasma is told about
+```
+
+The second must name the folder that contains `plasma/applets/` from the first.
+
+### Removing SoundRoot
+
+```bash
+rm -rf ~/.local/share/plasma/plasmoids/org.kde.plasma.soundroot
+find ~/.local -name 'org.kde.plasma.soundroot.so' -delete
+rm -f ~/.config/environment.d/50-soundroot.conf
+```
+
+Your rooms stay in `~/.config/audiorouter/groups.json`; delete that too if you want them gone.
+
+### Network nodes do not find each other
+
+See [docs/NETWORK_NODES.md](docs/NETWORK_NODES.md#when-devices-do-not-find-each-other) — most often a firewall blocking UDP ports 47780–47781.
+
 ## Keyboard Shortcuts
 
 | Action | Default Shortcut |
@@ -141,7 +162,7 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-The tests run against a fake sound server and over the loopback interface; they need neither PipeWire nor Plasma. `tests/run-in-netns.sh build/tests/tst_netengine` also exercises multicast discovery on machines whose firewall blocks it.
+The tests run against a fake sound server and over the loopback interface; they need neither PipeWire nor Plasma. GitHub Actions runs them on Arch, Debian and Fedora for every push to `main` and every pull request ([ci.yml](.github/workflows/ci.yml)). `tests/run-in-netns.sh build/tests/tst_netengine` also exercises multicast discovery on machines whose firewall blocks it.
 
 To try a build without touching the plasmoid that is running in your panel, install it into a separate prefix and start it with `plasmawindowed`:
 
