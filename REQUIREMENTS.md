@@ -54,43 +54,48 @@
 
 ## Must have
 - [x] System tray icon
-  - KDE tray icon implemented as a Plasma 6 Plasmoid (PlasmoidItem).
-  - Compact representation shows audio icon in system tray panel.
-  - Full popup opens on click with complete group management UI.
+  - Plasma 6 plasmoid. The tray icon carries a dot in the active room's colour; the tooltip names the active room.
+  - The popup opens on click with the room list and the routing board.
 - [x] Allow many to many connections
-  - One source can route to multiple outputs using PulseAudio combined sinks.
-  - Same source can be reused across groups.
-  - Multi-output selection via inline "Add Output" flow in route editor.
+  - One stream can be wired to several outputs (a `module-combine-sink` per set of outputs, shared by all streams with that set).
+  - Several streams can be wired to one output.
 - [x] Manage volume
-  - Per-route volume slider (0–150%) in group detail UI.
-  - Volume is persisted in settings and applied to matching sink-input streams.
+  - A volume slider (0–150%) on every application stream and every output device, plus one for the default output.
+  - These set the sound server's own volumes. They are not stored per room.
 - [x] Be able to group sources and outputs
-  - Full group CRUD: create (with name + color), delete, toggle active.
-  - Group activation immediately applies/deactivates all routes via PulseAudio.
-  - Group list with active switch toggles in main popup view.
+  - Rooms: create (name, colour, icon), edit, delete, reorder, switch on and off. One room is on at a time.
+  - Switching a room on applies its wiring; switching it off puts the streams back on the default output.
 - [x] View audio source devices
-  - Live source list (sink-inputs) and output list (sinks) exposed to QML.
-  - Source/output ComboBoxes populated from PulseAudio live data when adding routes.
+  - Live lists of application streams and output devices.
+  - Saved sources that are not playing and wired devices that are unplugged are shown greyed out.
 
 ## Should have
 - [x] Remember setup
-  - Groups/routes are persisted to JSON (~/.config/audiorouter/groups.json).
-  - Group active state is persisted and re-applied after PulseAudio connects.
-
-- [ ] Create profiles
-  - Not implemented yet as a first-class profile entity (current groups can act as a basic profile-like mechanism).
+  - Rooms, wires and virtual nodes are saved to `~/.config/audiorouter/groups.json` (atomic write).
+  - The active room is re-applied at login, when a stream or device appears later, and after the sound server restarts.
+- [x] Create profiles
+  - Rooms are the profiles.
 
 ## Nice to have
 - [ ] Test sound button
 - [ ] Auto switch profile
-- [ ] Hotkey swap
-- [ ] Visual indicator of active profile/device
+- [x] Hotkey swap
+  - Global shortcuts for next / previous room (default `Ctrl+Alt+→` / `Ctrl+Alt+←`), handled in the plugin so they work before the popup has ever been opened.
+- [x] Visual indicator of active profile/device
+  - Coloured dot on the tray icon; "default" label on the default output; wires coloured by output.
 
 ## Future/Vision
-- [ ] Allow virtual devices output (beyond current combined sink workflow)
+- [x] Allow virtual devices output
+  - Virtual nodes (`module-null-sink` + `module-loopback`) per room.
+  - Network nodes: a virtual node shared between devices on the local network. See `docs/NETWORK_NODES.md`.
 
+# Dependencies
 
-Fix:
-- New Group somehow have removed custom color and icon
-- Shortcut
-- Scrolling
+Build: CMake ≥ 3.20, Extra CMake Modules, Qt 6 (Core, Gui, Quick, Network, Test), KDE Frameworks 6 (CoreAddons, Config, Package, GlobalAccel, I18n, XmlGui), libplasma, libpulse, libsodium.
+
+Run: Plasma 6, and PipeWire with pipewire-pulse (or PulseAudio).
+
+# Earlier notes ("Fix:")
+- *New Group somehow have removed custom color and icon* — the room dialog was rebuilt; the chosen colour and icon are passed through on create and on edit. Not re-tested by hand with the colour picker.
+- *Shortcut* — handled in the plugin now (see "Hotkey swap").
+- *Scrolling* — every column of the board scrolls on its own, only when it does not fit.
