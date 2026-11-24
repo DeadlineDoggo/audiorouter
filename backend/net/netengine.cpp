@@ -28,6 +28,7 @@ constexpr int    kMaxPeers         = 16;      // per node
 constexpr int    kSilenceHangover  = 40;      // silent packets still sent before pausing (200 ms)
 constexpr int    kPacketBytes      = kFramesPerPacket * kBytesPerFrame;
 constexpr int    kMaxCaptureQueue  = kSampleRate * kBytesPerFrame;   // 1 s
+constexpr int    kDscpExpedited    = 46;      // DSCP EF; the TOS byte is this << 2
 
 bool allZero(const QByteArray &pcm)
 {
@@ -152,6 +153,11 @@ void NetWorker::start()
     boundPort = m_data->localPort();
     m_data->setSocketOption(QAbstractSocket::MulticastTtlOption, 1);        // never leaves the LAN
     m_data->setSocketOption(QAbstractSocket::MulticastLoopbackOption, 1);   // instances on one machine
+    // Mark the packets as real-time audio: DSCP "expedited forwarding" (46),
+    // the class calls use.  Wi-Fi sends them in its voice queue (WMM) and
+    // routers that honour DSCP let them skip queues full of downloads.  Where
+    // nothing honours it, it changes nothing.
+    m_data->setSocketOption(QAbstractSocket::TypeOfServiceOption, kDscpExpedited << 2);
     connect(m_data, &QUdpSocket::readyRead, this, [this]() { readSocket(m_data); });
 
     if (m_options.multicast) {

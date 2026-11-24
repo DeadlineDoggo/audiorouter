@@ -6,6 +6,10 @@
 #include <QUdpSocket>
 
 #include "net/netengine.h"
+
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #include "net/netprotocol.h"
 
 // Two (or three) NetEngine instances in one process talk to each other over
@@ -177,6 +181,50 @@ private slots:
         }
         QVERIFY(aHeardB);
         QVERIFY(bHeardA);
+    }
+
+    // The packets are marked as real-time audio (DSCP EF), so Wi-Fi and
+    // routers that honour it send them ahead of bulk traffic.
+    void packetsAreMarkedAsRealTime()
+    {
+        // A plain socket that reports the TOS byte of what it receives
+        const int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
+        QVERIFY(fd >= 0);
+        const int on = 1;
+        QCOMPARE(::setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof on), 0);
+        sockaddr_in addr {};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        QCOMPARE(::bind(fd, reinterpret_cast<sockaddr *>(&addr), sizeof addr), 0);
+        socklen_t len = sizeof addr;
+        QCOMPARE(::getsockname(fd, reinterpret_cast<sockaddr *>(&addr), &len), 0);
+        const timeval timeout { 3, 0 };
+        ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
+
+        // The engine sends its beacons to a static peer: this socket
+        NetEngine a(options(QStringLiteral("a")));
+        QTRY_VERIFY(a.dataPort() != 0);
+        a.startNode(spec(QStringLiteral("A"), QStringLiteral("den"), QStringLiteral("pw"),
+                         { QStringLiteral("127.0.0.1:%1").arg(ntohs(addr.sin_port)) }));
+
+        char data[2048];
+        char control[CMSG_SPACE(sizeof(int))];
+        iovec iov { data, sizeof data };
+        msghdr msg {};
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+        msg.msg_control = control;
+        msg.msg_controllen = sizeof control;
+        const ssize_t got = ::recvmsg(fd, &msg, 0);
+        ::close(fd);
+        QVERIFY2(got > 0, "no beacon arrived");
+
+        int tos = -1;
+        for (cmsghdr *c = CMSG_FIRSTHDR(&msg); c; c = CMSG_NXTHDR(&msg, c)) {
+            if (c->cmsg_level == IPPROTO_IP && c->cmsg_type == IP_TOS)
+                tos = *reinterpret_cast<unsigned char *>(CMSG_DATA(c));
+        }
+        QCOMPARE(tos >> 2, 46);   // DSCP EF
     }
 
     // Two nodes of one SoundRoot on the same channel are a pair: each hears
