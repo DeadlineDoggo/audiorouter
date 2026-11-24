@@ -123,7 +123,7 @@ Rectangle {
                 opacity: 0.75
                 text: overlay.networkOn
                       ? "Every node with the same channel name and passphrase is connected, on other devices and on this computer: what is played into IN here comes out of OUT there, and the other way round. The audio is encrypted; anyone who has the passphrase can listen and play."
-                      : "A local node passes whatever is played into IN on to the outputs wired to OUT. To pair two nodes, turn this on in both and give them the same channel name and passphrase; on one computer that works without a network."
+                      : "A local node passes whatever is played into IN on to the outputs wired to OUT. Wire OUT to an app under RECORDING to send the node into a call, and microphones into IN to mix your voice in. To pair two nodes, turn this on in both and give them the same channel name and passphrase; on one computer that works without a network."
             }
 
             GridLayout {

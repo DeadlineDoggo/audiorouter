@@ -57,6 +57,10 @@ add_library(soundroot_core STATIC
     backend/models/sinkinputmodel.h
     backend/models/sinkmodel.cpp
     backend/models/sinkmodel.h
+    backend/models/sourcemodel.cpp
+    backend/models/sourcemodel.h
+    backend/models/sourceoutputmodel.cpp
+    backend/models/sourceoutputmodel.h
     backend/routing/routingengine.cpp
     backend/routing/routingengine.h
     backend/routing/streambinder.cpp

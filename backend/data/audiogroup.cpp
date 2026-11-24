@@ -52,20 +52,23 @@ NetworkNodeConfig NetworkNodeConfig::fromJson(const QJsonObject &obj)
 // AudioRoute
 // ---------------------------------------------------------------------------
 
-QString AudioRoute::appName() const
+QString AudioRoute::appNameOf(const QString &key)
 {
-    const auto tab = sourceAppName.indexOf(QLatin1Char('\t'));
-    return tab >= 0 ? sourceAppName.left(tab) : sourceAppName;
+    const auto tab = key.indexOf(QLatin1Char('\t'));
+    return tab >= 0 ? key.left(tab) : key;
 }
 
-int AudioRoute::ordinal() const
+int AudioRoute::ordinalOf(const QString &key)
 {
-    const auto tab = sourceAppName.indexOf(QLatin1Char('\t'));
+    const auto tab = key.indexOf(QLatin1Char('\t'));
     if (tab < 0) return -1;
     bool ok = false;
-    const int n = sourceAppName.mid(tab + 1).toInt(&ok);
+    const int n = key.mid(tab + 1).toInt(&ok);
     return ok && n >= 0 ? n : -1;
 }
+
+QString AudioRoute::appName() const { return appNameOf(sourceAppName); }
+int     AudioRoute::ordinal() const { return ordinalOf(sourceAppName); }
 
 QString AudioRoute::makeKey(const QString &appName, int ordinal)
 {
@@ -94,6 +97,29 @@ AudioRoute AudioRoute::fromJson(const QJsonObject &obj)
 }
 
 // ---------------------------------------------------------------------------
+// CaptureRoute
+// ---------------------------------------------------------------------------
+
+QJsonObject CaptureRoute::toJson() const
+{
+    QJsonObject obj;
+    obj[QStringLiteral("app")] = key;
+    if (!mediaHint.isEmpty())
+        obj[QStringLiteral("media")] = mediaHint;
+    obj[QStringLiteral("source")] = sourceName;
+    return obj;
+}
+
+CaptureRoute CaptureRoute::fromJson(const QJsonObject &obj)
+{
+    CaptureRoute route;
+    route.key = obj[QStringLiteral("app")].toString();
+    route.mediaHint = obj[QStringLiteral("media")].toString();
+    route.sourceName = obj[QStringLiteral("source")].toString();
+    return route;
+}
+
+// ---------------------------------------------------------------------------
 // VirtualSinkDef
 // ---------------------------------------------------------------------------
 
@@ -103,6 +129,8 @@ QJsonObject VirtualSinkDef::toJson() const
     obj[QStringLiteral("displayName")] = displayName;
     obj[QStringLiteral("paName")] = paName;
     obj[QStringLiteral("loopbackTargets")] = toArray(loopbackTargets);
+    if (!inputSources.isEmpty())
+        obj[QStringLiteral("inputSources")] = toArray(inputSources);
     // Written only when it was ever configured, so plain virtual nodes keep
     // the file format old versions wrote.
     if (network != NetworkNodeConfig())
@@ -116,6 +144,7 @@ VirtualSinkDef VirtualSinkDef::fromJson(const QJsonObject &obj)
     vs.displayName = obj[QStringLiteral("displayName")].toString();
     vs.paName = obj[QStringLiteral("paName")].toString();
     vs.loopbackTargets = toStringList(obj[QStringLiteral("loopbackTargets")]);
+    vs.inputSources = toStringList(obj[QStringLiteral("inputSources")]);
     vs.network = NetworkNodeConfig::fromJson(obj[QStringLiteral("network")].toObject());
     return vs;
 }
@@ -146,7 +175,8 @@ int AudioGroup::linkCount() const
     for (const auto &r : routes)
         n += r.outputSinkNames.size();
     for (const auto &vs : virtualSinks)
-        n += vs.loopbackTargets.size();
+        n += vs.loopbackTargets.size() + vs.inputSources.size();
+    n += captures.size();
     return static_cast<int>(n);
 }
 
@@ -174,6 +204,14 @@ AudioRoute *AudioGroup::route(const QString &key)
     return nullptr;
 }
 
+CaptureRoute *AudioGroup::capture(const QString &key)
+{
+    for (auto &c : captures) {
+        if (c.key == key) return &c;
+    }
+    return nullptr;
+}
+
 QJsonObject AudioGroup::toJson() const
 {
     QJsonObject obj;
@@ -192,6 +230,15 @@ QJsonObject AudioGroup::toJson() const
     for (const auto &vs : virtualSinks)
         vsinkArray.append(vs.toJson());
     obj[QStringLiteral("virtualSinks")] = vsinkArray;
+
+    // Written only when there are any, so rooms without them keep the format
+    // older versions read.
+    if (!captures.isEmpty()) {
+        QJsonArray captureArray;
+        for (const auto &cap : captures)
+            captureArray.append(cap.toJson());
+        obj[QStringLiteral("captures")] = captureArray;
+    }
 
     return obj;
 }
@@ -230,6 +277,14 @@ AudioGroup AudioGroup::fromJson(const QJsonObject &obj)
         const VirtualSinkDef vs = VirtualSinkDef::fromJson(val.toObject());
         if (!vs.paName.isEmpty() && !group.virtualSink(vs.paName))
             group.virtualSinks.append(vs);
+    }
+
+    const auto captures = obj[QStringLiteral("captures")].toArray();
+    for (const auto &val : captures) {
+        const CaptureRoute cap = CaptureRoute::fromJson(val.toObject());
+        // One application records from one source: the first entry wins
+        if (!cap.key.isEmpty() && !cap.sourceName.isEmpty() && !group.capture(cap.key))
+            group.captures.append(cap);
     }
 
     return group;

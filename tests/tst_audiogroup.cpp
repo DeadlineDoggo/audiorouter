@@ -1,9 +1,11 @@
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include "audiotypes.h"
 #include "data/audiogroup.h"
 #include "data/settings.h"
 
@@ -56,6 +58,46 @@ private slots:
         QCOMPARE(back.virtualSinks[0].loopbackTargets, vs.loopbackTargets);
         QVERIFY(back.virtualSinks[0].network == vs.network);
         QCOMPARE(back.linkCount(), 3);
+    }
+
+    void recordingWiresRoundTrip()
+    {
+        AudioGroup g(QStringLiteral("Calls"));
+        VirtualSinkDef vs;
+        vs.paName = QStringLiteral("soundroot_virt_bb");
+        vs.inputSources = { QStringLiteral("usb_mic") };
+        g.virtualSinks.append(vs);
+        CaptureRoute cap;
+        cap.key = AudioRoute::makeKey(QStringLiteral("Teams for Linux"), 0);
+        cap.mediaHint = QStringLiteral("RecordStream");
+        cap.sourceName = virtualMicName(vs.paName);
+        g.captures.append(cap);
+        CaptureRoute duplicate = cap;
+        duplicate.sourceName = QStringLiteral("usb_mic");
+        g.captures.append(duplicate);   // never written by the engine; the first one wins
+
+        const AudioGroup back = AudioGroup::fromJson(g.toJson());
+        QCOMPARE(back.virtualSinks[0].inputSources, vs.inputSources);
+        QCOMPARE(back.captures.size(), 1);
+        QCOMPARE(back.captures[0].key, cap.key);
+        QCOMPARE(back.captures[0].appName(), QStringLiteral("Teams for Linux"));
+        QCOMPARE(back.captures[0].ordinal(), 0);
+        QCOMPARE(back.captures[0].mediaHint, cap.mediaHint);
+        QCOMPARE(back.captures[0].sourceName, cap.sourceName);
+        QCOMPARE(back.linkCount(), 2);
+    }
+
+    void roomsWithoutRecordingKeepTheOldFormat()
+    {
+        AudioGroup g(QStringLiteral("Music"));
+        VirtualSinkDef vs;
+        vs.paName = QStringLiteral("soundroot_virt_cc");
+        g.virtualSinks.append(vs);
+        const QJsonObject obj = g.toJson();
+        QVERIFY(!obj.contains(QStringLiteral("captures")));
+        QVERIFY(!obj[QStringLiteral("virtualSinks")].toArray()[0].toObject().contains(QStringLiteral("inputSources")));
+        // and a file of an old version loads with none
+        QVERIFY(AudioGroup::fromJson(obj).captures.isEmpty());
     }
 
     // A file as written by 0.8.1: no "media", no "network", a legacy route

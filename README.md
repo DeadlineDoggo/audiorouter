@@ -19,6 +19,7 @@ SoundRoot is a KDE Plasma 6 plasmoid that lets you create audio "rooms" — name
 - **Many-to-Many Routing** — Wire any application stream to any combination of outputs
 - **Drag-to-Wire** — Visual board: drag from a dot to another dot; click a wire to remove it
 - **Virtual Nodes** — Mix several applications into one node and send that to one or more outputs
+- **Route Into Calls** — Send a node or a microphone into an application that records (Teams, Discord, OBS, a browser call): music and your voice in one call ([how it works](docs/RECORDING.md))
 - **Network Nodes** — Share a virtual node between devices on the same local network, encrypted ([how it works](docs/NETWORK_NODES.md))
 - **Stays Applied** — Streams that start later, devices plugged in later and a restarted sound server are picked up automatically
 - **Nothing Gets Lost** — Applications that are not playing and unplugged devices stay on the board, greyed out, with their wires

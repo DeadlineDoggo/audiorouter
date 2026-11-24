@@ -7,8 +7,9 @@ import org.kde.plasma.extras as PlasmaExtras
 import org.kde.plasma.plasmoid
 
 /**
- * The routing routingBoard of one room: applications on the left, output devices
- * on the right, virtual nodes in between, and the wires that connect them.
+ * The routing routingBoard of one room: applications and microphones on the
+ * left, output devices and recording applications on the right, virtual nodes
+ * in between, and the wires that connect them.
  *
  * The routingBoard is a view.  Which wires exist is decided by the routing engine
  * (C++); the routingBoard draws what it is given and turns drags and clicks into
@@ -32,10 +33,16 @@ Item {
     property var ghostSources: []
     /// [{name, description}] wired devices that are not present
     property var ghostSinks: []
+    /// [{key, description}] wired microphones that are not present
+    property var ghostMics: []
+    /// [{key, appName, mediaName}] wired recording applications that are not recording
+    property var ghostRecorders: []
     /// [{paName, displayName, networkEnabled, ...}]
     property var virtualNodes: []
     property var sinkModel: null
     property var sinkInputModel: null
+    property var sourceModel: null
+    property var sourceOutputModel: null
     /// The "new virtual node" name field is open
     property bool addingNode: false
 
@@ -279,6 +286,16 @@ Item {
     // ════════════════════════════════════════════════════════════════════
     //  Columns
     // ════════════════════════════════════════════════════════════════════
+
+    /// Caption of the second group of cards in a column
+    component SectionLabel: PlasmaComponents.Label {
+        topPadding: Kirigami.Units.largeSpacing
+        horizontalAlignment: Text.AlignHCenter
+        font.pointSize: Kirigami.Theme.smallFont.pointSize
+        font.weight: Font.DemiBold
+        font.letterSpacing: 1.5
+        opacity: 0.5
+    }
     readonly property bool virtualVisible: virtualNodes.length > 0 || addingNode
     readonly property real gu: Kirigami.Units.gridUnit
     readonly property real virtualWidth: virtualVisible
@@ -333,6 +350,38 @@ Item {
                 iconName: "applications-multimedia"
                 text: "No audio streams"
                 explanation: "Play something and it shows up here."
+            }
+
+            // ── Microphones ─────────────────────────────────────────
+            SectionLabel {
+                width: appsColumn.cardWidth
+                visible: (routingBoard.sourceModel && routingBoard.sourceModel.count > 0)
+                         || routingBoard.ghostMics.length > 0
+                text: "MICROPHONES"
+            }
+
+            Repeater {
+                model: routingBoard.sourceModel
+                delegate: MicCard {
+                    board: routingBoard
+                    viewport: appsColumn.viewport
+                    width: appsColumn.cardWidth
+                }
+            }
+
+            Repeater {
+                model: routingBoard.ghostMics
+                delegate: GhostCard {
+                    required property var modelData
+                    board: routingBoard
+                    viewport: appsColumn.viewport
+                    width: appsColumn.cardWidth
+                    nodeKey: modelData.key
+                    title: modelData.description
+                    subtitle: "Not connected"
+                    iconSource: "audio-input-microphone"
+                    portOnLeft: false
+                }
             }
         }
 
@@ -462,6 +511,47 @@ Item {
                 text: "No output devices"
                 explanation: Plasmoid.serverConnected ? "The sound server reports none."
                                                       : "Waiting for the sound server…"
+            }
+
+            // ── Applications that record ────────────────────────────
+            SectionLabel {
+                width: outputsColumn.cardWidth
+                text: "RECORDING"
+            }
+
+            Repeater {
+                model: routingBoard.sourceOutputModel
+                delegate: RecorderCard {
+                    board: routingBoard
+                    viewport: outputsColumn.viewport
+                    width: outputsColumn.cardWidth
+                }
+            }
+
+            Repeater {
+                model: routingBoard.ghostRecorders
+                delegate: GhostCard {
+                    required property var modelData
+                    board: routingBoard
+                    viewport: outputsColumn.viewport
+                    width: outputsColumn.cardWidth
+                    nodeKey: modelData.key
+                    title: modelData.appName
+                    subtitle: "Not recording"
+                    iconSource: "media-record"
+                    portOnLeft: true
+                }
+            }
+
+            PlasmaComponents.Label {
+                width: outputsColumn.cardWidth
+                visible: routingBoard.sourceOutputModel && routingBoard.sourceOutputModel.count === 0
+                         && routingBoard.ghostRecorders.length === 0
+                text: "Apps that use a microphone (a call, a recorder) show up here while they record."
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                opacity: 0.5
             }
         }
     }

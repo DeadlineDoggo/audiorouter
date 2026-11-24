@@ -49,11 +49,23 @@ public:
  * without timers or one-shot "apply" calls that can miss.
  *
  * Node keys used with the UI:
- *   "input:<index>"   a live application stream
- *   "app:<route key>" a saved source that is not playing right now
- *   "sink:<name>"     an output device (present or not)
- *   "vsinkin:<pa>"    a virtual node's input side
- *   "vsinkout:<pa>"   a virtual node's output side
+ *   "input:<index>"    a live application stream
+ *   "app:<route key>"  a saved source that is not playing right now
+ *   "sink:<name>"      an output device (present or not)
+ *   "vsinkin:<pa>"     a virtual node's input side
+ *   "vsinkout:<pa>"    a virtual node's output side
+ *   "mic:<name>"       a microphone (present or not)
+ *   "rec:<index>"      a live recording application
+ *   "recapp:<key>"     a saved recording application that is not recording
+ *
+ * Wires, always written from the source side:
+ *   input:/app:  → sink:/vsinkin:   the application plays there
+ *   vsinkout:    → sink:/vsinkin:   the node's output is played there
+ *   mic:         → vsinkin:         the microphone plays into the node
+ *   mic:         → rec:/recapp:     the application records the microphone
+ *   vsinkout:    → rec:/recapp:     the application records the node (its
+ *                                   virtual microphone); local nodes only
+ * A recording application has one wire at most: a new one replaces it.
  */
 class RoutingEngine : public QObject {
     Q_OBJECT
@@ -86,6 +98,11 @@ public:
     QVariantList offlineSources(int row);
     /// [{name, description}] wired outputs that are not present.
     QVariantList offlineSinks(int row);
+    /// [{key, description}] wired microphones that are not present.
+    QVariantList offlineMics(int row);
+    /// [{key, appName, mediaName}] wired recording applications that are
+    /// not recording right now.
+    QVariantList offlineRecorders(int row);
 
     // ── Virtual nodes ───────────────────────────────────────────────────
     QString addVirtualSink(int row, const QString &displayName);
@@ -107,10 +124,16 @@ signals:
 
 private:
     struct Endpoints {
-        enum Kind { Invalid, Route, Loopback } kind = Invalid;
-        QString source;   // input:/app: key, or virtual node pa name (Loopback)
-        QString target;   // sink name
+        enum Kind { Invalid, Route, Loopback, MicInput, Capture } kind = Invalid;
+        // Route:    input:/app: key        → sink name
+        // Loopback: virtual node pa name   → sink name
+        // MicInput: microphone source name → virtual node pa name
+        // Capture:  source name (a microphone or a node's virtual
+        //           microphone)            → rec:/recapp: key
+        QString source;
+        QString target;
     };
+    struct MoveAttempts { QString target; int count = 0; qint64 since = 0; };
 
     Endpoints   classify(const QString &a, const QString &b) const;
     AudioGroup *group(int row) const;
@@ -120,6 +143,12 @@ private:
     /// Route key behind a source node key; creates the route for an unrouted
     /// live stream when @p create is set.  Empty when there is none.
     QString routeKeyFor(AudioGroup &g, const QString &sourceKey, bool create);
+    /// Bindings of a room's recording applications for the current streams.
+    const StreamBinder::Bindings &captureBindingsFor(const AudioGroup &g);
+    /// The same as routeKeyFor, for a rec:/recapp: key.
+    QString captureKeyFor(AudioGroup &g, const QString &recKey, bool create);
+    /// Remove wires of recording applications that record @p sourceName.
+    static void dropCapturesFrom(AudioGroup &g, const QString &sourceName);
     bool    wouldLoop(const AudioGroup &g, const QString &fromPa, const QString &toSink) const;
     void    roomEdited(int row);
     void    dropUnusedRoutes(AudioGroup &g);
@@ -128,6 +157,11 @@ private:
     void notifyIfTopologyChanged();
     void rememberSinkLabels();
     bool tryMove(const PASinkInputInfo &stream, uint32_t sinkIndex, const QString &sinkName);
+    /// Counts a move of a stream to @p target; false once the stream has
+    /// been moved there too often lately (something keeps moving it back).
+    bool allowMove(QHash<uint32_t, MoveAttempts> &attempts, uint32_t stream,
+                   const QString &appName, const QString &target);
+    void reconcileRecorders(const AudioGroup *room);
     void stopNetworkNode(const QString &paName);
 
     AudioBackend      *m_backend;
@@ -137,7 +171,8 @@ private:
     QTimer m_reconcileTimer;   // coalesces change bursts
     QTimer m_watchdogTimer;    // slow safety pass while a room is active
 
-    QHash<QString, StreamBinder::Bindings> m_bindings;   // room id → bindings
+    QHash<QString, StreamBinder::Bindings> m_bindings;         // room id → bindings
+    QHash<QString, StreamBinder::Bindings> m_captureBindings;  // room id → recorder bindings
     QString m_topologySignature;   // streams + sinks the UI was last told about
 
     // What we created on the server
@@ -145,9 +180,11 @@ private:
     QHash<QString, NetworkController::NodeSpec> m_netNodes;   // started network nodes
     QSet<QString>               m_combines;         // combine-sink names
     QSet<uint32_t>              m_managedStreams;   // streams we routed
+    QSet<uint32_t>              m_managedRecorders; // recording applications we moved
 
-    // Guard against fighting the server over a stream it keeps moving back
-    struct MoveAttempts { QString target; int count = 0; qint64 since = 0; };
+    // Guard against fighting the server over a stream it keeps moving back.
+    // Playback and recording streams are numbered separately.
     QHash<uint32_t, MoveAttempts> m_moveAttempts;
+    QHash<uint32_t, MoveAttempts> m_recorderMoveAttempts;
     QElapsedTimer m_clock;
 };

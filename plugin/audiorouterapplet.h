@@ -8,6 +8,8 @@
 #include "models/grouplistmodel.h"
 #include "models/sinkinputmodel.h"
 #include "models/sinkmodel.h"
+#include "models/sourcemodel.h"
+#include "models/sourceoutputmodel.h"
 #include "net/netengine.h"
 #include "routing/routingengine.h"
 
@@ -27,6 +29,8 @@ class AudioRouterApplet : public Plasma::Applet {
     Q_PROPERTY(GroupListModel*  groupModel      READ groupModel      CONSTANT)
     Q_PROPERTY(SinkModel*       sinkModel       READ sinkModel       CONSTANT)
     Q_PROPERTY(SinkInputModel*  sinkInputModel  READ sinkInputModel  CONSTANT)
+    Q_PROPERTY(SourceModel*       sourceModel       READ sourceModel       CONSTANT)
+    Q_PROPERTY(SourceOutputModel* sourceOutputModel READ sourceOutputModel CONSTANT)
     Q_PROPERTY(int masterVolume READ masterVolume NOTIFY masterVolumeChanged)
     /// False while the sound server is unreachable.
     Q_PROPERTY(bool serverConnected READ serverConnected NOTIFY serverConnectedChanged)
@@ -44,6 +48,8 @@ public:
     GroupListModel  *groupModel()     { return &m_groupModel; }
     SinkModel       *sinkModel()      { return &m_sinkModel; }
     SinkInputModel  *sinkInputModel() { return &m_sinkInputModel; }
+    SourceModel       *sourceModel()       { return &m_sourceModel; }
+    SourceOutputModel *sourceOutputModel() { return &m_sourceOutputModel; }
     int              masterVolume()   const { return m_audioBackend.defaultSinkVolume(); }
     bool             serverConnected() const { return m_audioBackend.isConnected(); }
     QKeySequence     nextRoomShortcut() const;
@@ -70,6 +76,8 @@ public:
     Q_INVOKABLE QVariantList roomConnections(int row);
     Q_INVOKABLE QVariantList offlineSources(int row);
     Q_INVOKABLE QVariantList offlineSinks(int row);
+    Q_INVOKABLE QVariantList offlineMics(int row);
+    Q_INVOKABLE QVariantList offlineRecorders(int row);
 
     // ── Volumes ─────────────────────────────────────────────────────────
     Q_INVOKABLE void setMasterVolume(int percent);
@@ -108,6 +116,8 @@ private:
     GroupListModel     m_groupModel;
     SinkModel          m_sinkModel;
     SinkInputModel     m_sinkInputModel;
+    SourceModel        m_sourceModel;
+    SourceOutputModel  m_sourceOutputModel;
     RoutingEngine      m_engine;
     QAction           *m_nextAction = nullptr;
     QAction           *m_prevAction = nullptr;

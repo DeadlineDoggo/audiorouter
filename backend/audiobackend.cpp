@@ -16,12 +16,40 @@ struct ModuleLoadData {
     QStringList slaves;   // slaves this particular load was started with
 };
 
+// What a virtual-node module load is for
+enum VirtualModuleKind {
+    NullSinkModule,   // key: paName
+    LoopbackModule,   // key: "paName|sinkName"  (OUT side)
+    MicModule,        // key: paName             (the node's microphone)
+    InputModule,      // key: "paName|sourceName" (a microphone into IN)
+};
+
 // Data passed through virtual-sink / loopback module-load callbacks
 struct VirtualModuleLoadData {
     PulseAudioBackend *backend;
-    QString key;       // paName for null-sinks; "paName|sinkName" for loopbacks
-    bool isLoopback;
+    QString key;
+    int kind;
 };
+
+namespace {
+/// Key under which a load in flight is remembered; one set for all kinds,
+/// so the kinds whose keys could look alike are told apart.
+QString pendingKey(int kind, const QString &key)
+{
+    switch (kind) {
+    case MicModule:   return QStringLiteral("mic:") + key;
+    case InputModule: return QStringLiteral("in:") + key;
+    default:          return key;
+    }
+}
+
+/// Text for a module argument that is wrapped as  x='y="…"'
+QString quotable(QString text)
+{
+    text.remove(QLatin1Char('"')).remove(QLatin1Char('\'')).remove(QLatin1Char('\\'));
+    return text;
+}
+} // namespace
 
 // Data passed through sink / sink-input list callbacks: the generation the
 // enumeration was started with, so results of a superseded one are dropped.
@@ -168,10 +196,16 @@ void PulseAudioBackend::teardown()
     m_loopbackModules.clear();
     m_wantedVirtualSinks.clear();
     m_wantedLoopbacks.clear();
+    m_wantedMics.clear();
+    m_micModules.clear();
+    m_wantedInputs.clear();
+    m_inputModules.clear();
     m_pendingVirtualLoads.clear();
     m_streamFailures.clear();
     m_pendingSinks.clear();
     m_pendingSinkInputs.clear();
+    m_pendingSources.clear();
+    m_pendingSourceOutputs.clear();
 
     QMutexLocker lock(&m_mutex);
     m_combinedModules.clear();
@@ -179,7 +213,10 @@ void PulseAudioBackend::teardown()
     m_pendingCombined.clear();
     m_sinks.clear();
     m_sinkInputs.clear();
+    m_sources.clear();
+    m_sourceOutputs.clear();
     m_defaultSinkName.clear();
+    m_defaultSourceName.clear();
 }
 
 void PulseAudioBackend::shutdown()
@@ -200,9 +237,19 @@ void PulseAudioBackend::shutdown()
         }
         m_wantedLoopbacks.clear();
         m_wantedVirtualSinks.clear();
+        m_wantedMics.clear();
+        m_wantedInputs.clear();
         for (auto it = m_loopbackModules.cbegin(); it != m_loopbackModules.cend(); ++it)
             unloadModuleLocked(it.value());
         m_loopbackModules.clear();
+        for (auto it = m_inputModules.cbegin(); it != m_inputModules.cend(); ++it)
+            unloadModuleLocked(it.value());
+        m_inputModules.clear();
+        // A recording application on a node's microphone falls back to the
+        // default source when the microphone goes.
+        for (auto it = m_micModules.cbegin(); it != m_micModules.cend(); ++it)
+            unloadModuleLocked(it.value());
+        m_micModules.clear();
         for (auto it = m_virtualSinkModules.cbegin(); it != m_virtualSinkModules.cend(); ++it)
             unloadModuleLocked(it.value());
         m_virtualSinkModules.clear();
@@ -255,6 +302,8 @@ void PulseAudioBackend::handleServerLost(quintptr deadContext)
     emit serverDisconnected();
     emit sinksChanged();
     emit sinkInputsChanged();
+    emit sourcesChanged();
+    emit sourceOutputsChanged();
 
     // A context cannot be reused after it failed: start over with a new one,
     // again and again until the server is back.
@@ -293,6 +342,24 @@ QString PulseAudioBackend::defaultSinkName() const
     return m_defaultSinkName;
 }
 
+QVector<PASourceInfo> PulseAudioBackend::availableSources() const
+{
+    QMutexLocker lock(&m_mutex);
+    return m_sources;
+}
+
+QVector<PASourceOutputInfo> PulseAudioBackend::availableSourceOutputs() const
+{
+    QMutexLocker lock(&m_mutex);
+    return m_sourceOutputs;
+}
+
+QString PulseAudioBackend::defaultSourceName() const
+{
+    QMutexLocker lock(&m_mutex);
+    return m_defaultSourceName;
+}
+
 int PulseAudioBackend::defaultSinkVolume() const
 {
     QMutexLocker lock(&m_mutex);
@@ -310,6 +377,17 @@ void PulseAudioBackend::moveSinkInput(uint32_t sinkInputIndex, uint32_t sinkInde
     pa_threaded_mainloop_lock(m_mainloop);
     pa_operation *op = pa_context_move_sink_input_by_index(
         m_context, sinkInputIndex, sinkIndex, successCallback, this);
+    if (op) pa_operation_unref(op);
+    pa_threaded_mainloop_unlock(m_mainloop);
+}
+
+void PulseAudioBackend::moveSourceOutput(uint32_t sourceOutputIndex, uint32_t sourceIndex)
+{
+    if (!m_context || !m_connected) return;
+
+    pa_threaded_mainloop_lock(m_mainloop);
+    pa_operation *op = pa_context_move_source_output_by_index(
+        m_context, sourceOutputIndex, sourceIndex, successCallback, this);
     if (op) pa_operation_unref(op);
     pa_threaded_mainloop_unlock(m_mainloop);
 }
@@ -548,27 +626,18 @@ void PulseAudioBackend::createVirtualSink(const QString &paName,
 
     // The description is wrapped as sink_properties='device.description="…"',
     // so strip the quote characters that would break that nesting.
-    QString safe = displayName.isEmpty() ? paName : displayName;
-    safe.remove(QLatin1Char('"')).remove(QLatin1Char('\'')).remove(QLatin1Char('\\'));
+    const QString safe = quotable(displayName.isEmpty() ? paName : displayName);
     const QString args =
         QStringLiteral("sink_name=%1 sink_properties='device.description=\"%2\"'")
             .arg(paName, safe);
 
     pa_threaded_mainloop_lock(m_mainloop);
     m_wantedVirtualSinks.insert(paName);
-    if (!m_virtualSinkModules.contains(paName) && !m_pendingVirtualLoads.contains(paName)) {
-        auto *data = new VirtualModuleLoadData{this, paName, false};
-        pa_operation *op = pa_context_load_module(
-            m_context, "module-null-sink",
-            args.toUtf8().constData(),
-            virtualModuleLoadCallback, data);
-        if (op) {
-            trackUserdata(data, [data]() { delete data; });
-            m_pendingVirtualLoads.insert(paName);
-            pa_operation_unref(op);
-        } else {
-            delete data;
-        }
+    m_wantedMics.insert(paName, QStringLiteral("SoundRoot: ") + safe);
+    if (m_virtualSinkModules.contains(paName)) {
+        loadVirtualMicLocked(paName);   // e.g. it failed to load before
+    } else if (!m_pendingVirtualLoads.contains(paName)) {
+        loadVirtualModuleLocked("module-null-sink", args, paName, NullSinkModule);
     }
     pa_threaded_mainloop_unlock(m_mainloop);
 }
@@ -583,19 +652,29 @@ void PulseAudioBackend::destroyVirtualSink(const QString &paName)
     // by virtualModuleLoadCallback when they complete.
     const QString prefix = paName + QLatin1Char('|');
     m_wantedVirtualSinks.remove(paName);
-    for (auto it = m_wantedLoopbacks.begin(); it != m_wantedLoopbacks.end();) {
-        if (it->startsWith(prefix)) it = m_wantedLoopbacks.erase(it);
-        else ++it;
+    m_wantedMics.remove(paName);
+    for (auto *wanted : { &m_wantedLoopbacks, &m_wantedInputs }) {
+        for (auto it = wanted->begin(); it != wanted->end();) {
+            if (it->startsWith(prefix)) it = wanted->erase(it);
+            else ++it;
+        }
     }
 
-    // Destroy all loopbacks for this virtual sink first
-    for (auto it = m_loopbackModules.begin(); it != m_loopbackModules.end();) {
-        if (it.key().startsWith(prefix)) {
-            unloadModuleLocked(it.value());
-            it = m_loopbackModules.erase(it);
-        } else {
-            ++it;
+    // Destroy everything attached to the null-sink first
+    for (auto *loaded : { &m_loopbackModules, &m_inputModules }) {
+        for (auto it = loaded->begin(); it != loaded->end();) {
+            if (it.key().startsWith(prefix)) {
+                unloadModuleLocked(it.value());
+                it = loaded->erase(it);
+            } else {
+                ++it;
+            }
         }
+    }
+    auto mic = m_micModules.find(paName);
+    if (mic != m_micModules.end()) {
+        unloadModuleLocked(mic.value());
+        m_micModules.erase(mic);
     }
 
     // Destroy the null-sink module
@@ -607,6 +686,30 @@ void PulseAudioBackend::destroyVirtualSink(const QString &paName)
 
     pa_threaded_mainloop_unlock(m_mainloop);
 }
+
+namespace {
+/// Bring the wanted keys of one node (all starting with prefix) in line with
+/// @p desired; unloads what is no longer wanted.  Returns nothing to load:
+/// the caller loads what is missing.
+template <typename Unload>
+void syncWanted(QSet<QString> &wanted, QMap<QString, uint32_t> &loaded,
+                const QString &prefix, const QSet<QString> &desired, Unload unload)
+{
+    for (auto it = wanted.begin(); it != wanted.end();) {
+        if (it->startsWith(prefix) && !desired.contains(*it)) {
+            auto module = loaded.find(*it);
+            if (module != loaded.end()) {
+                unload(module.value());
+                loaded.erase(module);
+            }
+            it = wanted.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    wanted.unite(desired);
+}
+} // namespace
 
 void PulseAudioBackend::setVirtualSinkLoopbacks(const QString &paName,
                                                 const QStringList &targetSinks)
@@ -626,26 +729,39 @@ void PulseAudioBackend::setVirtualSinkLoopbacks(const QString &paName,
         if (!sinkName.isEmpty())
             desired.insert(prefix + sinkName);
     }
-
-    // Drop loopbacks that are no longer wanted
-    for (auto it = m_wantedLoopbacks.begin(); it != m_wantedLoopbacks.end();) {
-        if (it->startsWith(prefix) && !desired.contains(*it)) {
-            auto loaded = m_loopbackModules.find(*it);
-            if (loaded != m_loopbackModules.end()) {
-                unloadModuleLocked(loaded.value());
-                m_loopbackModules.erase(loaded);
-            }
-            it = m_wantedLoopbacks.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    m_wantedLoopbacks.unite(desired);
+    syncWanted(m_wantedLoopbacks, m_loopbackModules, prefix, desired,
+               [this](uint32_t idx) { unloadModuleLocked(idx); });
 
     // If the null-sink is still loading, its load callback creates these.
     if (m_virtualSinkModules.contains(paName))
         loadMissingLoopbacksLocked(paName);
+
+    pa_threaded_mainloop_unlock(m_mainloop);
+}
+
+void PulseAudioBackend::setVirtualSinkInputs(const QString &paName,
+                                             const QStringList &sourceNames)
+{
+    if (!m_context || !m_connected) return;
+
+    pa_threaded_mainloop_lock(m_mainloop);
+
+    if (!m_wantedVirtualSinks.contains(paName)) {
+        pa_threaded_mainloop_unlock(m_mainloop);
+        return;
+    }
+
+    const QString prefix = paName + QLatin1Char('|');
+    QSet<QString> desired;
+    for (const auto &source : sourceNames) {
+        if (!source.isEmpty())
+            desired.insert(prefix + source);
+    }
+    syncWanted(m_wantedInputs, m_inputModules, prefix, desired,
+               [this](uint32_t idx) { unloadModuleLocked(idx); });
+
+    if (m_virtualSinkModules.contains(paName))
+        loadMissingInputsLocked(paName);
 
     pa_threaded_mainloop_unlock(m_mainloop);
 }
@@ -670,6 +786,22 @@ void PulseAudioBackend::unloadModuleCallback(pa_context * /*c*/, int success,
         qWarning() << "SoundRoot: failed to unload module";
 }
 
+bool PulseAudioBackend::loadVirtualModuleLocked(const char *module, const QString &args,
+                                                const QString &key, int kind)
+{
+    auto *data = new VirtualModuleLoadData{this, key, kind};
+    pa_operation *op = pa_context_load_module(
+        m_context, module, args.toUtf8().constData(), virtualModuleLoadCallback, data);
+    if (!op) {
+        delete data;
+        return false;
+    }
+    trackUserdata(data, [data]() { delete data; });
+    m_pendingVirtualLoads.insert(pendingKey(kind, key));
+    pa_operation_unref(op);
+    return true;
+}
+
 void PulseAudioBackend::loadMissingLoopbacksLocked(const QString &paName)
 {
     const QString prefix = paName + QLatin1Char('|');
@@ -677,7 +809,7 @@ void PulseAudioBackend::loadMissingLoopbacksLocked(const QString &paName)
 
     for (const auto &key : std::as_const(m_wantedLoopbacks)) {
         if (!key.startsWith(prefix) || m_loopbackModules.contains(key) ||
-            m_pendingVirtualLoads.contains(key))
+            m_pendingVirtualLoads.contains(pendingKey(LoopbackModule, key)))
             continue;
 
         const QString sinkName = key.mid(prefix.size());
@@ -689,19 +821,44 @@ void PulseAudioBackend::loadMissingLoopbacksLocked(const QString &paName)
             "source=%1 sink=%2 latency_msec=50 source_dont_move=true sink_dont_move=true "
             "sink_input_properties=media.name=soundroot_loopback_%3")
                 .arg(monitorSource, sinkName, paName);
+        loadVirtualModuleLocked("module-loopback", args, key, LoopbackModule);
+    }
+}
 
-        auto *data = new VirtualModuleLoadData{this, key, true};
-        pa_operation *op = pa_context_load_module(
-            m_context, "module-loopback",
-            args.toUtf8().constData(),
-            virtualModuleLoadCallback, data);
-        if (op) {
-            trackUserdata(data, [data]() { delete data; });
-            m_pendingVirtualLoads.insert(key);
-            pa_operation_unref(op);
-        } else {
-            delete data;
-        }
+void PulseAudioBackend::loadVirtualMicLocked(const QString &paName)
+{
+    const auto wanted = m_wantedMics.constFind(paName);
+    if (wanted == m_wantedMics.constEnd() || m_micModules.contains(paName)
+        || m_pendingVirtualLoads.contains(pendingKey(MicModule, paName)))
+        return;
+
+    // A remap of the monitor looks like an ordinary microphone.  Applications
+    // built on Chromium (Teams, Discord, ...) do not offer monitors at all.
+    const QString args = QStringLiteral(
+        "master=%1.monitor source_name=%2 source_properties='device.description=\"%3\"'")
+            .arg(paName, virtualMicName(paName), wanted.value());
+    loadVirtualModuleLocked("module-remap-source", args, paName, MicModule);
+}
+
+void PulseAudioBackend::loadMissingInputsLocked(const QString &paName)
+{
+    const QString prefix = paName + QLatin1Char('|');
+
+    for (const auto &key : std::as_const(m_wantedInputs)) {
+        if (!key.startsWith(prefix) || m_inputModules.contains(key) ||
+            m_pendingVirtualLoads.contains(pendingKey(InputModule, key)))
+            continue;
+
+        const QString sourceName = key.mid(prefix.size());
+        // A voice in a call must not lag: a short latency.  *_dont_move as
+        // above: an unplugged microphone ends the loopback instead of
+        // recording another one.
+        const QString args = QStringLiteral(
+            "source=%1 sink=%2 latency_msec=20 source_dont_move=true sink_dont_move=true "
+            "sink_input_properties=media.name=soundroot_loopback_in_%2 "
+            "source_output_properties=media.name=soundroot_loopback_in_%2")
+                .arg(sourceName, paName);
+        loadVirtualModuleLocked("module-loopback", args, key, InputModule);
     }
 }
 
@@ -712,29 +869,47 @@ void PulseAudioBackend::virtualModuleLoadCallback(pa_context * /*c*/,
     auto *data = static_cast<VirtualModuleLoadData *>(userdata);
     auto *self = data->backend;
     const QString key = data->key;
-    const bool isLoopback = data->isLoopback;
+    const int kind = data->kind;
     self->untrackUserdata(data);
     delete data;
 
-    self->m_pendingVirtualLoads.remove(key);
-    const bool wanted = isLoopback ? self->m_wantedLoopbacks.contains(key)
-                                   : self->m_wantedVirtualSinks.contains(key);
+    self->m_pendingVirtualLoads.remove(pendingKey(kind, key));
+
+    bool wanted = false;
+    switch (kind) {
+    case NullSinkModule: wanted = self->m_wantedVirtualSinks.contains(key); break;
+    case LoopbackModule: wanted = self->m_wantedLoopbacks.contains(key); break;
+    case MicModule:      wanted = self->m_wantedMics.contains(key); break;
+    case InputModule:    wanted = self->m_wantedInputs.contains(key); break;
+    }
 
     if (idx == PA_INVALID_INDEX) {
-        qWarning() << "SoundRoot: failed to load"
-                   << (isLoopback ? "loopback" : "virtual sink")
-                   << "module for" << key;
+        static const char *const names[] = { "virtual sink", "loopback", "microphone", "input loopback" };
+        qWarning() << "SoundRoot: failed to load" << names[kind] << "module for" << key;
         // Forget it so a later create/set call can retry
-        if (isLoopback) self->m_wantedLoopbacks.remove(key);
-        else            self->m_wantedVirtualSinks.remove(key);
-    } else if (!wanted) {
+        switch (kind) {
+        case NullSinkModule: self->m_wantedVirtualSinks.remove(key); break;
+        case LoopbackModule: self->m_wantedLoopbacks.remove(key); break;
+        case MicModule:      break;   // retried by the next createVirtualSink
+        case InputModule:    self->m_wantedInputs.remove(key); break;
+        }
+        return;
+    }
+    if (!wanted) {
         // Destroyed or replaced while the load was in flight
         self->unloadModuleLocked(idx);
-    } else if (isLoopback) {
-        self->m_loopbackModules.insert(key, idx);
-    } else {
+        return;
+    }
+    switch (kind) {
+    case NullSinkModule:
         self->m_virtualSinkModules.insert(key, idx);
+        self->loadVirtualMicLocked(key);
         self->loadMissingLoopbacksLocked(key);
+        self->loadMissingInputsLocked(key);
+        break;
+    case LoopbackModule: self->m_loopbackModules.insert(key, idx); break;
+    case MicModule:      self->m_micModules.insert(key, idx); break;
+    case InputModule:    self->m_inputModules.insert(key, idx); break;
     }
 }
 
@@ -990,6 +1165,34 @@ void PulseAudioBackend::refreshSinkInputsLocked()
     }
 }
 
+void PulseAudioBackend::refreshSourcesLocked()
+{
+    m_pendingSources.clear();
+    auto *req = new EnumRequest{this, ++m_sourceGen};
+    pa_operation *op =
+        pa_context_get_source_info_list(m_context, sourceInfoCallback, req);
+    if (op) {
+        trackUserdata(req, [req]() { delete req; });
+        pa_operation_unref(op);
+    } else {
+        delete req;
+    }
+}
+
+void PulseAudioBackend::refreshSourceOutputsLocked()
+{
+    m_pendingSourceOutputs.clear();
+    auto *req = new EnumRequest{this, ++m_sourceOutputGen};
+    pa_operation *op =
+        pa_context_get_source_output_info_list(m_context, sourceOutputInfoCallback, req);
+    if (op) {
+        trackUserdata(req, [req]() { delete req; });
+        pa_operation_unref(op);
+    } else {
+        delete req;
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PulseAudio static callbacks (called with PA mainloop lock held)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1005,13 +1208,15 @@ void PulseAudioBackend::contextStateCallback(pa_context *c, void *userdata)
         self->m_reportedUnreachable = false;
         self->m_reconnectDelayMs = kReconnectDelayMs;
 
-        // Subscribe to sink, sink-input, and server (default-sink) changes
+        // Subscribe to both directions and to server (default device) changes
         pa_context_set_subscribe_callback(c, subscribeCallback, self);
         if (pa_operation *op = pa_context_subscribe(
                 c,
                 static_cast<pa_subscription_mask_t>(
                     PA_SUBSCRIPTION_MASK_SINK |
                     PA_SUBSCRIPTION_MASK_SINK_INPUT |
+                    PA_SUBSCRIPTION_MASK_SOURCE |
+                    PA_SUBSCRIPTION_MASK_SOURCE_OUTPUT |
                     PA_SUBSCRIPTION_MASK_SERVER),
                 nullptr, nullptr))
             pa_operation_unref(op);
@@ -1019,6 +1224,8 @@ void PulseAudioBackend::contextStateCallback(pa_context *c, void *userdata)
         // Initial population (lock is already held inside callback)
         self->refreshSinksLocked();
         self->refreshSinkInputsLocked();
+        self->refreshSourcesLocked();
+        self->refreshSourceOutputsLocked();
 
         // Fetch the initial default-sink name
         if (pa_operation *op = pa_context_get_server_info(c, serverInfoCallback, self))
@@ -1059,6 +1266,12 @@ void PulseAudioBackend::subscribeCallback(pa_context *c,
 
     } else if (facility == PA_SUBSCRIPTION_EVENT_SINK_INPUT) {
         self->refreshSinkInputsLocked();   // invalidates any in-flight enumeration
+
+    } else if (facility == PA_SUBSCRIPTION_EVENT_SOURCE) {
+        self->refreshSourcesLocked();
+
+    } else if (facility == PA_SUBSCRIPTION_EVENT_SOURCE_OUTPUT) {
+        self->refreshSourceOutputsLocked();
     }
 }
 
@@ -1187,6 +1400,94 @@ void PulseAudioBackend::sinkInputInfoCallback(pa_context * /*c*/,
     self->m_pendingSinkInputs.append(si);
 }
 
+void PulseAudioBackend::sourceInfoCallback(pa_context * /*c*/,
+                                           const pa_source_info *info,
+                                           int eol, void *userdata)
+{
+    auto *req  = static_cast<EnumRequest *>(userdata);
+    auto *self = req->backend;
+    const bool superseded = (req->gen != self->m_sourceGen);
+
+    if (eol != 0) {
+        self->untrackUserdata(req);
+        delete req;
+        if (eol < 0 || superseded) return;
+        {
+            QMutexLocker lock(&self->m_mutex);
+            self->m_sources = self->m_pendingSources;
+        }
+        self->m_pendingSources.clear();
+        QMetaObject::invokeMethod(self, "sourcesChanged", Qt::QueuedConnection);
+        return;
+    }
+    if (!info || superseded) return;
+
+    // A monitor carries what an output plays; it is not a microphone.  The
+    // node microphones (remaps of a node's monitor) are kept: the engine
+    // moves recording applications onto them.
+    if (info->monitor_of_sink != PA_INVALID_INDEX) return;
+
+    PASourceInfo source;
+    source.index       = info->index;
+    source.name        = QString::fromUtf8(info->name);
+    source.description = QString::fromUtf8(info->description);
+    self->m_pendingSources.append(source);
+}
+
+void PulseAudioBackend::sourceOutputInfoCallback(pa_context * /*c*/,
+                                                 const pa_source_output_info *info,
+                                                 int eol, void *userdata)
+{
+    auto *req  = static_cast<EnumRequest *>(userdata);
+    auto *self = req->backend;
+    const bool superseded = (req->gen != self->m_sourceOutputGen);
+
+    if (eol != 0) {
+        self->untrackUserdata(req);
+        delete req;
+        if (eol < 0 || superseded) return;
+        {
+            QMutexLocker lock(&self->m_mutex);
+            self->m_sourceOutputs = self->m_pendingSourceOutputs;
+        }
+        self->m_pendingSourceOutputs.clear();
+        QMetaObject::invokeMethod(self, "sourceOutputsChanged", Qt::QueuedConnection);
+        return;
+    }
+    if (!info || superseded) return;
+
+    // Only applications that record.  Left out:
+    //  - streams of modules: our node microphones and loopbacks, and the
+    //    same kind of thing loaded by anyone else;
+    //  - peak meters (volume applets, pavucontrol).  PipeWire marks them
+    //    with stream.monitor / resample.peaks; PulseAudio reports the
+    //    resampler "peaks";
+    //  - our own network capture.
+    if (info->owner_module != PA_INVALID_INDEX || info->client == PA_INVALID_INDEX)
+        return;
+    auto prop = [info](const char *key) {
+        const char *v = pa_proplist_gets(info->proplist, key);
+        return v ? QByteArray(v) : QByteArray();
+    };
+    if (prop("stream.monitor") == "true" || prop("resample.peaks") == "true"
+        || (info->resample_method && qstrcmp(info->resample_method, "peaks") == 0))
+        return;
+
+    PASourceOutputInfo so;
+    so.index       = info->index;
+    so.sourceIndex = info->source;
+    const QByteArray app = prop(PA_PROP_APPLICATION_NAME);
+    so.appName   = app.isEmpty() ? QString::fromUtf8(info->name) : QString::fromUtf8(app);
+    const QByteArray media = prop(PA_PROP_MEDIA_NAME);
+    so.mediaName = media.isEmpty() ? QString::fromUtf8(info->name) : QString::fromUtf8(media);
+    const QByteArray icon = prop(PA_PROP_APPLICATION_ICON_NAME);
+    so.iconName  = icon.isEmpty() ? QStringLiteral("audio-input-microphone") : QString::fromUtf8(icon);
+
+    if (so.mediaName.startsWith(netCapturePrefix())) return;
+
+    self->m_pendingSourceOutputs.append(so);
+}
+
 void PulseAudioBackend::successCallback(pa_context * /*c*/,
                                         int success, void * /*userdata*/)
 {
@@ -1201,13 +1502,17 @@ void PulseAudioBackend::serverInfoCallback(pa_context * /*c*/,
     if (!info) return;
     auto *self = static_cast<PulseAudioBackend *>(userdata);
     const QString name = QString::fromUtf8(info->default_sink_name);
+    const QString sourceName = QString::fromUtf8(info->default_source_name);
 
     int newVol = -1;
     bool changed = false;
+    bool sourceChanged = false;
     {
         QMutexLocker lock(&self->m_mutex);
         changed = self->m_defaultSinkName != name;
         self->m_defaultSinkName = name;
+        sourceChanged = self->m_defaultSourceName != sourceName;
+        self->m_defaultSourceName = sourceName;
         // If we already have the sink list, extract volume immediately
         for (const auto &s : std::as_const(self->m_sinks)) {
             if (s.name == name) {
@@ -1219,6 +1524,8 @@ void PulseAudioBackend::serverInfoCallback(pa_context * /*c*/,
     }
     if (changed)   // which device is the default is part of the sink list for the UI
         QMetaObject::invokeMethod(self, "sinksChanged", Qt::QueuedConnection);
+    if (sourceChanged)
+        QMetaObject::invokeMethod(self, "sourcesChanged", Qt::QueuedConnection);
     if (newVol >= 0) {
         QMetaObject::invokeMethod(self, [self, newVol]() {
             emit self->defaultSinkVolumeChanged(newVol);

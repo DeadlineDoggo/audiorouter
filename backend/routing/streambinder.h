@@ -35,7 +35,14 @@ Bindings bind(const QVector<AudioRoute> &routes,
               const QVector<PASinkInputInfo> &streams,
               const Bindings &previous);
 
+/// The same for recording applications.  Their routes have no legacy form,
+/// so rule 4 never applies.
+Bindings bind(const QVector<CaptureRoute> &routes,
+              const QVector<PASourceOutputInfo> &streams,
+              const Bindings &previous);
+
 /// Lowest ordinal not used by any route of @p appName.
 int freeOrdinal(const QVector<AudioRoute> &routes, const QString &appName);
+int freeOrdinal(const QVector<CaptureRoute> &routes, const QString &appName);
 
 } // namespace StreamBinder

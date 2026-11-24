@@ -11,10 +11,15 @@ static QString in(uint32_t index) { return QStringLiteral("input:%1").arg(index)
 static QString sink(const QString &name) { return QStringLiteral("sink:") + name; }
 static QString vin(const QString &pa) { return QStringLiteral("vsinkin:") + pa; }
 static QString vout(const QString &pa) { return QStringLiteral("vsinkout:") + pa; }
+static QString mic(const QString &name) { return QStringLiteral("mic:") + name; }
+static QString rec(uint32_t index) { return QStringLiteral("rec:%1").arg(index); }
 
 static const QString SPK = QStringLiteral("speakers");
 static const QString HP  = QStringLiteral("headphones");
 static const QString TV  = QStringLiteral("hdmi");
+static const QString MIC = QStringLiteral("builtin_mic");
+static const QString USB = QStringLiteral("usb_mic");
+static const QString TEAMS = QStringLiteral("Teams for Linux");
 
 static QStringList sorted(QStringList list) { list.sort(); return list; }
 
@@ -35,6 +40,8 @@ struct Rig {
         backend.addSink(SPK, QStringLiteral("Built-in Speakers"));   // the default
         backend.addSink(HP, QStringLiteral("USB Headphones"));
         backend.addSink(TV, QStringLiteral("Living Room TV"));
+        backend.addSource(MIC, QStringLiteral("Built-in Microphone"));   // the default
+        backend.addSource(USB, QStringLiteral("USB Microphone"));
     }
     ~Rig() { Settings::instance().setFilePath({}); }
 
@@ -625,6 +632,250 @@ private slots:
         rig.engine.activateRoom(room);
         QVERIFY(rig.net.nodes.isEmpty());
         QVERIFY(rig.backend.captures.isEmpty());
+    }
+
+    // ── Recording applications ──────────────────────────────────────────
+
+    void aMicrophoneIsWiredIntoACall()
+    {
+        Rig rig;
+        const int room = rig.addRoom(QStringLiteral("Calls"));
+        const uint32_t call = rig.backend.addRecorder(TEAMS);
+        QCOMPARE(rig.backend.sourceOf(call), MIC);
+
+        QVERIFY(rig.engine.connectNodes(room, rec(call), mic(USB)));   // either direction
+        QCOMPARE(rig.backend.recorderMoveCalls, 0);                    // room is off
+        QVERIFY(rig.hasWire(room, mic(USB), rec(call)));
+
+        rig.engine.activateRoom(room);
+        QCOMPARE(rig.backend.sourceOf(call), USB);
+    }
+
+    void aNodeIsSentIntoACall()
+    {
+        Rig rig;
+        const int room = rig.addRoom(QStringLiteral("Calls"));
+        const QString pa = rig.engine.addVirtualSink(room, QStringLiteral("Call"));
+        rig.engine.activateRoom(room);
+        const uint32_t music = rig.backend.addStream(QStringLiteral("Spotify"));
+        const uint32_t call = rig.backend.addRecorder(TEAMS);
+
+        QVERIFY(rig.engine.connectNodes(room, in(music), vin(pa)));
+        QVERIFY(rig.engine.connectNodes(room, mic(MIC), vin(pa)));
+        QVERIFY(rig.engine.connectNodes(room, vout(pa), rec(call)));
+        QVERIFY(rig.engine.connectNodes(room, vout(pa), sink(HP)));   // and I hear it too
+
+        QCOMPARE(rig.backend.sinkOf(music), pa);
+        QCOMPARE(rig.backend.micInputs.value(pa), QStringList({ MIC }));
+        QCOMPARE(rig.backend.sourceOf(call), virtualMicName(pa));
+        QCOMPARE(rig.backend.loopbacks.value(pa), QStringList({ HP }));
+        QVERIFY(rig.hasWire(room, mic(MIC), vin(pa)));
+        QVERIFY(rig.hasWire(room, vout(pa), rec(call)));
+        QCOMPARE(rig.groups.data(rig.groups.index(room), GroupListModel::LinkCountRole).toInt(), 4);
+    }
+
+    void aSecondWireIntoARecorderReplacesTheFirst()
+    {
+        Rig rig;
+        const int room = rig.addRoom(QStringLiteral("Calls"));
+        const QString pa = rig.engine.addVirtualSink(room, QStringLiteral("Call"));
+        rig.engine.activateRoom(room);
+        const uint32_t call = rig.backend.addRecorder(TEAMS);
+
+        rig.engine.connectNodes(room, mic(USB), rec(call));
+        QVERIFY(rig.engine.canConnect(room, vout(pa), rec(call)));
+        rig.engine.connectNodes(room, vout(pa), rec(call));
+
+        QCOMPARE(rig.groups.groupAt(room)->captures.size(), 1);
+        QVERIFY(!rig.hasWire(room, mic(USB), rec(call)));
+        QVERIFY(rig.hasWire(room, vout(pa), rec(call)));
+        QCOMPARE(rig.backend.sourceOf(call), virtualMicName(pa));
+    }
+
+    void aNewCallIsRoutedLikeTheLastOne()
+    {
+        Rig rig;
+        const int room = rig.addRoom(QStringLiteral("Calls"));
+        rig.engine.activateRoom(room);
+        const uint32_t first = rig.backend.addRecorder(TEAMS, QStringLiteral("RecordStream"));
+        rig.engine.connectNodes(room, mic(USB), rec(first));
+        QCOMPARE(rig.backend.sourceOf(first), USB);
+
+        // The call ends; it is shown as an application that is not recording
+        rig.backend.removeRecorder(first);
+        const auto ghosts = rig.engine.offlineRecorders(room);
+        QCOMPARE(ghosts.size(), 1);
+        QCOMPARE(ghosts[0].toMap().value(QStringLiteral("appName")).toString(), TEAMS);
+
+        // The next call opens a new stream, on the default microphone
+        const uint32_t second = rig.backend.addRecorder(TEAMS, QStringLiteral("RecordStream"));
+        QTRY_COMPARE(rig.backend.sourceOf(second), USB);
+        QVERIFY(rig.hasWire(room, mic(USB), rec(second)));
+        QVERIFY(rig.engine.offlineRecorders(room).isEmpty());
+    }
+
+    void recordersGoBackToTheDefaultMicrophone()
+    {
+        Rig rig;
+        const int room = rig.addRoom(QStringLiteral("Calls"));
+        const QString pa = rig.engine.addVirtualSink(room, QStringLiteral("Call"));
+        rig.engine.activateRoom(room);
+        const uint32_t call = rig.backend.addRecorder(TEAMS);
+        const uint32_t other = rig.backend.addRecorder(QStringLiteral("OBS"));
+        rig.engine.connectNodes(room, vout(pa), rec(call));
+        rig.engine.connectNodes(room, mic(USB), rec(other));
+        QCOMPARE(rig.backend.sourceOf(call), virtualMicName(pa));
+
+        // Removing a wire of an active room
+        rig.engine.disconnectNodes(room, mic(USB), rec(other));
+        QCOMPARE(rig.backend.sourceOf(other), MIC);
+
+        // Switching the room off
+        rig.engine.deactivateRoom(room);
+        QCOMPARE(rig.backend.sourceOf(call), MIC);
+        QVERIFY(!rig.backend.virtualSinks.contains(pa));
+        QCOMPARE(rig.backend.sourceIndexOf(virtualMicName(pa)), kInvalidIndex);
+
+        // ... and on again
+        rig.engine.activateRoom(room);
+        QCOMPARE(rig.backend.sourceOf(call), virtualMicName(pa));
+    }
+
+    void microphonesFollowThePlug()
+    {
+        Rig rig;
+        const int room = rig.addRoom(QStringLiteral("Calls"));
+        const QString pa = rig.engine.addVirtualSink(room, QStringLiteral("Call"));
+        rig.engine.activateRoom(room);
+        const uint32_t call = rig.backend.addRecorder(TEAMS);
+        rig.engine.connectNodes(room, mic(USB), vin(pa));
+        rig.engine.connectNodes(room, mic(USB), rec(call));
+        QCOMPARE(rig.backend.micInputs.value(pa), QStringList({ USB }));
+
+        rig.backend.removeSource(USB);
+        QTRY_VERIFY(!rig.backend.micInputs.contains(pa));
+        QCOMPARE(rig.backend.sourceOf(call), MIC);   // the server re-homed it
+        const auto ghosts = rig.engine.offlineMics(room);
+        QCOMPARE(ghosts.size(), 1);
+        QCOMPARE(ghosts[0].toMap().value(QStringLiteral("key")).toString(), mic(USB));
+        QCOMPARE(ghosts[0].toMap().value(QStringLiteral("description")).toString(),
+                 QStringLiteral("USB Microphone"));   // remembered while it was there
+
+        rig.backend.addSource(USB, QStringLiteral("USB Microphone"));
+        QTRY_COMPARE(rig.backend.micInputs.value(pa), QStringList({ USB }));
+        QTRY_COMPARE(rig.backend.sourceOf(call), USB);
+        QVERIFY(rig.engine.offlineMics(room).isEmpty());
+    }
+
+    void invalidRecordingWiresAreRefused()
+    {
+        Rig rig;
+        const int room = rig.addRoom(QStringLiteral("Calls"));
+        const int other = rig.addRoom(QStringLiteral("Other"));
+        const QString pa = rig.engine.addVirtualSink(room, QStringLiteral("Call"));
+        const QString foreign = rig.engine.addVirtualSink(other, QStringLiteral("Elsewhere"));
+        const uint32_t call = rig.backend.addRecorder(TEAMS);
+        const uint32_t music = rig.backend.addStream(QStringLiteral("Spotify"));
+
+        QVERIFY(!rig.engine.canConnect(room, mic(MIC), sink(HP)));        // no monitoring yet
+        QVERIFY(!rig.engine.canConnect(room, in(music), rec(call)));      // through a node
+        QVERIFY(!rig.engine.canConnect(room, mic(MIC), vin(foreign)));    // another room's node
+        QVERIFY(!rig.engine.canConnect(room, vout(foreign), rec(call)));
+        QVERIFY(!rig.engine.canConnect(room, mic(MIC), rec(9999)));       // no such recorder
+        QVERIFY(!rig.engine.canConnect(room, mic(virtualMicName(pa)), rec(call)));
+        QVERIFY(!rig.engine.canConnect(room, mic(MIC), mic(USB)));
+        QVERIFY(!rig.engine.canConnect(room, rec(call), sink(HP)));
+
+        // A network node's OUT is what other devices send: not recordable
+        rig.engine.connectNodes(room, vout(pa), rec(call));
+        rig.engine.configureVirtualSink(room, pa, {
+            { QStringLiteral("networkEnabled"), true },
+            { QStringLiteral("channel"), QStringLiteral("den") },
+            { QStringLiteral("passphrase"), QStringLiteral("pw") },
+        });
+        QVERIFY(rig.groups.groupAt(room)->captures.isEmpty());
+        QVERIFY(!rig.engine.canConnect(room, vout(pa), rec(call)));
+        // ... but a microphone may go to the network
+        QVERIFY(rig.engine.canConnect(room, mic(MIC), vin(pa)));
+    }
+
+    void removingThingsRemovesTheirRecordingWires()
+    {
+        Rig rig;
+        const int room = rig.addRoom(QStringLiteral("Calls"));
+        const QString pa = rig.engine.addVirtualSink(room, QStringLiteral("Call"));
+        const uint32_t call = rig.backend.addRecorder(TEAMS);
+        const uint32_t obs = rig.backend.addRecorder(QStringLiteral("OBS"));
+        rig.engine.connectNodes(room, vout(pa), rec(call));
+        rig.engine.connectNodes(room, mic(USB), rec(obs));
+        rig.engine.connectNodes(room, mic(USB), vin(pa));
+
+        rig.engine.disconnectNode(room, mic(USB));
+        QVERIFY(!rig.hasWire(room, mic(USB), rec(obs)));
+        QVERIFY(!rig.hasWire(room, mic(USB), vin(pa)));
+        QVERIFY(rig.hasWire(room, vout(pa), rec(call)));
+
+        rig.engine.connectNodes(room, mic(USB), vin(pa));
+        rig.engine.disconnectNode(room, vin(pa));
+        QVERIFY(rig.groups.groupAt(room)->virtualSink(pa)->inputSources.isEmpty());
+
+        rig.engine.disconnectNode(room, rec(call));
+        QVERIFY(rig.groups.groupAt(room)->captures.isEmpty());
+
+        rig.engine.connectNodes(room, vout(pa), rec(call));
+        rig.engine.removeVirtualSink(room, pa);
+        QVERIFY(rig.groups.groupAt(room)->captures.isEmpty());
+        QVERIFY(rig.engine.connections(room).isEmpty());
+    }
+
+    void recordingWiresSurviveARestart()
+    {
+        QTemporaryDir dir;
+        Settings::instance().setFilePath(dir.filePath(QStringLiteral("groups.json")));
+        QString pa;
+        {
+            FakeBackend backend;
+            GroupListModel groups;
+            groups.load();
+            RoutingEngine engine(&backend, &groups);
+            backend.addSink(SPK);
+            backend.addSource(MIC);
+            groups.addGroup(QStringLiteral("Calls"), QStringLiteral("#50c878"));
+            pa = engine.addVirtualSink(0, QStringLiteral("Call"));
+            const uint32_t call = backend.addRecorder(TEAMS);
+            engine.connectNodes(0, mic(MIC), vin(pa));
+            engine.connectNodes(0, vout(pa), rec(call));
+            engine.activateRoom(0);
+        }
+        {
+            FakeBackend backend;
+            backend.nextIndex = 700;
+            GroupListModel groups;
+            groups.load();
+            RoutingEngine engine(&backend, &groups);
+            backend.addSink(SPK);
+            backend.addSource(MIC);
+            emit backend.serverConnected();
+
+            QCOMPARE(backend.micInputs.value(pa), QStringList({ MIC }));
+            QCOMPARE(engine.offlineRecorders(0).size(), 1);
+            const uint32_t call = backend.addRecorder(TEAMS);
+            QTRY_COMPARE(backend.sourceOf(call), virtualMicName(pa));
+        }
+        Settings::instance().setFilePath({});
+    }
+
+    void aRecorderThatIsMovedBackIsLeftAloneEventually()
+    {
+        Rig rig;
+        const int room = rig.addRoom(QStringLiteral("Calls"));
+        rig.engine.activateRoom(room);
+        const uint32_t call = rig.backend.addRecorder(TEAMS);
+        rig.backend.refuseMoves = true;
+        rig.engine.connectNodes(room, mic(USB), rec(call));
+        for (int i = 0; i < 20; ++i)
+            rig.engine.reconcile();
+        QVERIFY(rig.backend.recorderMoveCalls <= 6);
     }
 };
 

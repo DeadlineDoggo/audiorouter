@@ -108,9 +108,29 @@ private slots:
         QVERIFY(b.isEmpty());
     }
 
+    void recordersAreBoundLikePlayers()
+    {
+        CaptureRoute a, b;
+        a.key = AudioRoute::makeKey(QStringLiteral("Teams"), 0);
+        b.key = AudioRoute::makeKey(QStringLiteral("Teams"), 1);
+        b.mediaHint = QStringLiteral("Screen share");
+        auto rec = [](uint32_t index, const QString &media) {
+            PASourceOutputInfo r;
+            r.index = index;
+            r.appName = QStringLiteral("Teams");
+            r.mediaName = media;
+            return r;
+        };
+        const QVector<PASourceOutputInfo> streams { rec(5, QStringLiteral("Screen share")), rec(7, QStringLiteral("Call")) };
+        const Bindings bound = StreamBinder::bind(QVector<CaptureRoute>{ a, b }, streams, {});
+        QCOMPARE(bound.value(5), b.key);   // by media name
+        QCOMPARE(bound.value(7), a.key);
+        QCOMPARE(StreamBinder::freeOrdinal(QVector<CaptureRoute>{ a, b }, QStringLiteral("Teams")), 2);
+    }
+
     void freeOrdinal()
     {
-        QCOMPARE(StreamBinder::freeOrdinal({}, F), 0);
+        QCOMPARE(StreamBinder::freeOrdinal(QVector<AudioRoute>{}, F), 0);
         QCOMPARE(StreamBinder::freeOrdinal({ route(F, 0), route(F, 2), route(QStringLiteral("mpv"), 1) }, F), 1);
         QCOMPARE(StreamBinder::freeOrdinal({ route(F, -1) }, F), 0);
     }

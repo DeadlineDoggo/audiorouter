@@ -14,6 +14,8 @@ AudioRouterApplet::AudioRouterApplet(QObject *parent,
     : Plasma::Applet(parent, data, args)
     , m_sinkModel(&m_audioBackend)
     , m_sinkInputModel(&m_audioBackend)
+    , m_sourceModel(&m_audioBackend)
+    , m_sourceOutputModel(&m_audioBackend)
     , m_engine(&m_audioBackend, &m_groupModel)
 {
     m_engine.setNetworkController(&m_netEngine);
@@ -146,6 +148,8 @@ void AudioRouterApplet::clearRoom(int row)                  { m_engine.clearRoom
 QVariantList AudioRouterApplet::roomConnections(int row)    { return m_engine.connections(row); }
 QVariantList AudioRouterApplet::offlineSources(int row)     { return m_engine.offlineSources(row); }
 QVariantList AudioRouterApplet::offlineSinks(int row)       { return m_engine.offlineSinks(row); }
+QVariantList AudioRouterApplet::offlineMics(int row)        { return m_engine.offlineMics(row); }
+QVariantList AudioRouterApplet::offlineRecorders(int row)   { return m_engine.offlineRecorders(row); }
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Volumes

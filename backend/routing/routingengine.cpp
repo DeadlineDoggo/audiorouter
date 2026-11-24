@@ -5,6 +5,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <utility>
 
 #include "data/audiogroup.h"
 #include "models/grouplistmodel.h"
@@ -16,6 +17,11 @@ const QLatin1String kApp("app:");
 const QLatin1String kSink("sink:");
 const QLatin1String kVsinkIn("vsinkin:");
 const QLatin1String kVsinkOut("vsinkout:");
+const QLatin1String kMic("mic:");
+const QLatin1String kRec("rec:");
+const QLatin1String kRecApp("recapp:");
+
+bool isRecKey(const QString &k) { return k.startsWith(kRec) || k.startsWith(kRecApp); }
 
 bool isSourceKey(const QString &k) { return k.startsWith(kInput) || k.startsWith(kApp); }
 bool isTargetKey(const QString &k) { return k.startsWith(kSink) || k.startsWith(kVsinkIn); }
@@ -89,7 +95,7 @@ RoutingEngine::RoutingEngine(AudioBackend *backend, GroupListModel *groups, QObj
     m_watchdogTimer.setInterval(5000);
     connect(&m_watchdogTimer, &QTimer::timeout, this, [this]() {
         if (activeGroup() || !m_virtualSinks.isEmpty() || !m_combines.isEmpty()
-            || !m_managedStreams.isEmpty())
+            || !m_managedStreams.isEmpty() || !m_managedRecorders.isEmpty())
             reconcile();
     });
     m_watchdogTimer.start();
@@ -99,6 +105,14 @@ RoutingEngine::RoutingEngine(AudioBackend *backend, GroupListModel *groups, QObj
         notifyIfTopologyChanged();
     });
     connect(m_backend, &AudioBackend::sinkInputsChanged, this, [this]() {
+        scheduleReconcile();
+        notifyIfTopologyChanged();
+    });
+    connect(m_backend, &AudioBackend::sourcesChanged, this, [this]() {
+        scheduleReconcile();
+        notifyIfTopologyChanged();
+    });
+    connect(m_backend, &AudioBackend::sourceOutputsChanged, this, [this]() {
         scheduleReconcile();
         notifyIfTopologyChanged();
     });
@@ -128,9 +142,38 @@ const StreamBinder::Bindings &RoutingEngine::bindingsFor(const AudioGroup &g)
     return bindings;
 }
 
+const StreamBinder::Bindings &RoutingEngine::captureBindingsFor(const AudioGroup &g)
+{
+    auto &bindings = m_captureBindings[g.id];
+    bindings = StreamBinder::bind(g.captures, m_backend->availableSourceOutputs(), bindings);
+    return bindings;
+}
+
 RoutingEngine::Endpoints RoutingEngine::classify(const QString &a, const QString &b) const
 {
     Endpoints e;
+
+    // The recording side: a microphone or a node's output, into a node or
+    // into a recording application
+    for (const auto &[from, to] : { std::pair(&a, &b), std::pair(&b, &a) }) {
+        if (from->startsWith(kMic) && to->startsWith(kVsinkIn)) {
+            e.kind = Endpoints::MicInput;
+            e.source = from->mid(kMic.size());
+            e.target = to->mid(kVsinkIn.size());
+        } else if ((from->startsWith(kMic) || from->startsWith(kVsinkOut)) && isRecKey(*to)) {
+            e.kind = Endpoints::Capture;
+            e.source = from->startsWith(kMic) ? from->mid(kMic.size())
+                                              : virtualMicName(from->mid(kVsinkOut.size()));
+            e.target = *to;
+        } else {
+            continue;
+        }
+        if (e.source.isEmpty() || e.target.isEmpty()) return {};
+        // "mic:" is a real microphone; a node is reached through its OUT
+        if (from->startsWith(kMic) && isInternalSourceName(e.source)) return {};
+        return e;
+    }
+
     const QString *src = nullptr;
     const QString *dst = nullptr;
     if ((isSourceKey(a) || a.startsWith(kVsinkOut)) && isTargetKey(b)) { src = &a; dst = &b; }
@@ -184,6 +227,44 @@ QString RoutingEngine::routeKeyFor(AudioGroup &g, const QString &sourceKey, bool
     return {};
 }
 
+QString RoutingEngine::captureKeyFor(AudioGroup &g, const QString &recKey, bool create)
+{
+    if (recKey.startsWith(kRecApp)) {
+        const QString key = recKey.mid(kRecApp.size());
+        return g.capture(key) ? key : QString();
+    }
+    if (!recKey.startsWith(kRec)) return {};
+
+    bool ok = false;
+    const uint32_t index = recKey.mid(kRec.size()).toUInt(&ok);
+    if (!ok) return {};
+
+    const auto &bindings = captureBindingsFor(g);
+    const auto bound = bindings.constFind(index);
+    if (bound != bindings.constEnd())
+        return bound.value();
+    if (!create) return {};
+
+    const auto recorders = m_backend->availableSourceOutputs();
+    for (const auto &rec : recorders) {
+        if (rec.index != index) continue;
+        CaptureRoute cap;
+        cap.key = AudioRoute::makeKey(rec.appName, StreamBinder::freeOrdinal(g.captures, rec.appName));
+        cap.mediaHint = rec.mediaName;
+        g.captures.append(cap);
+        m_captureBindings[g.id].insert(index, cap.key);   // this very stream, as in routeKeyFor
+        return cap.key;
+    }
+    return {};
+}
+
+void RoutingEngine::dropCapturesFrom(AudioGroup &g, const QString &sourceName)
+{
+    g.captures.erase(std::remove_if(g.captures.begin(), g.captures.end(),
+                                    [&](const CaptureRoute &c) { return c.sourceName == sourceName; }),
+                     g.captures.end());
+}
+
 bool RoutingEngine::wouldLoop(const AudioGroup &g, const QString &fromPa,
                               const QString &toSink) const
 {
@@ -208,13 +289,24 @@ void RoutingEngine::rememberSinkLabels()
         const AudioGroup *g = m_groups->groupAt(i);
         for (const auto &r : g->routes)
             used.unite(QSet<QString>(r.outputSinkNames.cbegin(), r.outputSinkNames.cend()));
-        for (const auto &vs : g->virtualSinks)
+        for (const auto &vs : g->virtualSinks) {
             used.unite(QSet<QString>(vs.loopbackTargets.cbegin(), vs.loopbackTargets.cend()));
+            used.unite(QSet<QString>(vs.inputSources.cbegin(), vs.inputSources.cend()));
+        }
+        for (const auto &c : g->captures)
+            used.insert(c.sourceName);
     }
+    // One store for the labels of outputs and microphones: their names
+    // never clash (the server gives each a unique, descriptive name).
     bool changed = false;
     const auto sinks = m_backend->availableSinks();
     for (const auto &s : sinks) {
         if (used.contains(s.name) && !isInternalSinkName(s.name))
+            changed |= m_groups->rememberSinkLabel(s.name, s.description);
+    }
+    const auto sources = m_backend->availableSources();
+    for (const auto &s : sources) {
+        if (used.contains(s.name) && !isInternalSourceName(s.name))
             changed |= m_groups->rememberSinkLabel(s.name, s.description);
     }
     if (changed)
@@ -236,6 +328,15 @@ void RoutingEngine::notifyIfTopologyChanged()
     parts.append(QStringLiteral("|"));
     const auto sinks = m_backend->availableSinks();
     for (const auto &s : sinks)
+        parts.append(s.name);
+    parts.append(QStringLiteral("|"));
+    const auto recorders = m_backend->availableSourceOutputs();
+    for (const auto &r : recorders)
+        parts.append(QString::number(r.index) + QLatin1Char('\t') + r.appName
+                     + QLatin1Char('\t') + r.mediaName);
+    parts.append(QStringLiteral("|"));
+    const auto sources = m_backend->availableSources();
+    for (const auto &s : sources)
         parts.append(s.name);
     const QString signature = parts.join(QLatin1Char('\n'));
     if (signature == m_topologySignature) return;
@@ -267,6 +368,7 @@ void RoutingEngine::activateRoom(int row)
     }
     m_groups->setGroupActive(row, true);
     m_moveAttempts.clear();
+    m_recorderMoveAttempts.clear();
     reconcile();
 }
 
@@ -275,6 +377,7 @@ void RoutingEngine::deactivateRoom(int row)
     if (!m_groups->isGroupActive(row)) return;
     m_groups->setGroupActive(row, false);
     m_moveAttempts.clear();
+    m_recorderMoveAttempts.clear();
     reconcile();   // tears down what the room had set up
 }
 
@@ -285,6 +388,7 @@ void RoutingEngine::removeRoom(int row)
     const QString id = g->id;
     deactivateRoom(row);
     m_bindings.remove(id);
+    m_captureBindings.remove(id);
     m_groups->removeGroup(row);
     emit connectionsChanged();
     emit virtualSinksChanged();
@@ -314,6 +418,29 @@ bool RoutingEngine::canConnect(int row, const QString &a, const QString &b) cons
 
     const Endpoints e = classify(a, b);
     if (e.kind == Endpoints::Invalid) return false;
+
+    if (e.kind == Endpoints::MicInput)
+        return g->virtualSink(e.target) != nullptr;
+
+    if (e.kind == Endpoints::Capture) {
+        // From a node: one of this room's, and a local one.  A network
+        // node's OUT is what the other devices send, which its microphone
+        // does not carry.
+        const QString node = nodeOfVirtualMic(e.source);
+        if (!node.isEmpty()) {
+            const VirtualSinkDef *vs = g->virtualSink(node);
+            if (!vs || vs->isNetwork()) return false;
+        }
+        if (e.target.startsWith(kRecApp))
+            return g->captures.end() != std::find_if(g->captures.cbegin(), g->captures.cend(),
+                [&](const CaptureRoute &c) { return c.key == e.target.mid(kRecApp.size()); });
+        bool ok = false;
+        const uint32_t index = e.target.mid(kRec.size()).toUInt(&ok);
+        if (!ok) return false;
+        const auto recorders = m_backend->availableSourceOutputs();
+        return std::any_of(recorders.cbegin(), recorders.cend(),
+                           [index](const PASourceOutputInfo &r) { return r.index == index; });
+    }
 
     // A virtual target must be one of this room's nodes
     const bool virtualTarget = e.target.startsWith(virtualSinkPrefix());
@@ -349,6 +476,16 @@ bool RoutingEngine::connectNodes(int row, const QString &a, const QString &b)
         VirtualSinkDef *vs = g->virtualSink(e.source);
         if (vs->loopbackTargets.contains(e.target)) return true;
         vs->loopbackTargets.append(e.target);
+    } else if (e.kind == Endpoints::MicInput) {
+        VirtualSinkDef *vs = g->virtualSink(e.target);
+        if (vs->inputSources.contains(e.source)) return true;
+        vs->inputSources.append(e.source);
+    } else if (e.kind == Endpoints::Capture) {
+        // An application records one source: the new wire replaces the old
+        CaptureRoute *cap = g->capture(captureKeyFor(*g, e.target, true));
+        if (!cap) return false;
+        if (cap->sourceName == e.source) return true;
+        cap->sourceName = e.source;
     } else {
         const QString key = routeKeyFor(*g, e.source, true);
         AudioRoute *route = g->route(key);
@@ -373,6 +510,16 @@ void RoutingEngine::disconnectNodes(int row, const QString &a, const QString &b)
         if (AudioRoute *route = g->route(routeKeyFor(*g, e.source, false)))
             route->outputSinkNames.removeAll(e.target);
         dropUnusedRoutes(*g);
+    } else if (e.kind == Endpoints::MicInput) {
+        if (VirtualSinkDef *vs = g->virtualSink(e.target))
+            vs->inputSources.removeAll(e.source);
+    } else if (e.kind == Endpoints::Capture) {
+        const QString key = captureKeyFor(*g, e.target, false);
+        g->captures.erase(std::remove_if(g->captures.begin(), g->captures.end(),
+                                         [&](const CaptureRoute &c) {
+                                             return c.key == key && c.sourceName == e.source;
+                                         }),
+                          g->captures.end());
     } else {
         return;
     }
@@ -394,13 +541,27 @@ void RoutingEngine::disconnectNode(int row, const QString &key)
         VirtualSinkDef *vs = g->virtualSink(key.mid(kVsinkOut.size()));
         if (!vs) return;
         vs->loopbackTargets.clear();
+        dropCapturesFrom(*g, virtualMicName(vs->paName));
     } else if (isTargetKey(key)) {
         const QString sink = targetSinkName(key);
         for (auto &r : g->routes)
             r.outputSinkNames.removeAll(sink);
         for (auto &vs : g->virtualSinks)
             vs.loopbackTargets.removeAll(sink);
+        if (VirtualSinkDef *vs = g->virtualSink(sink))
+            vs->inputSources.clear();
         dropUnusedRoutes(*g);
+    } else if (key.startsWith(kMic)) {
+        const QString mic = key.mid(kMic.size());
+        for (auto &vs : g->virtualSinks)
+            vs.inputSources.removeAll(mic);
+        dropCapturesFrom(*g, mic);
+    } else if (isRecKey(key)) {
+        const QString capKey = captureKeyFor(*g, key, false);
+        if (capKey.isEmpty()) return;
+        g->captures.erase(std::remove_if(g->captures.begin(), g->captures.end(),
+                                         [&](const CaptureRoute &c) { return c.key == capKey; }),
+                          g->captures.end());
     } else {
         return;
     }
@@ -412,8 +573,11 @@ void RoutingEngine::clearRoom(int row)
     AudioGroup *g = group(row);
     if (!g) return;
     g->routes.clear();
-    for (auto &vs : g->virtualSinks)
+    g->captures.clear();
+    for (auto &vs : g->virtualSinks) {
         vs.loopbackTargets.clear();
+        vs.inputSources.clear();
+    }
     roomEdited(row);
 }
 
@@ -449,6 +613,26 @@ QVariantList RoutingEngine::connections(int row)
             if (sink.startsWith(virtualSinkPrefix()) && !g->virtualSink(sink)) continue;
             wire(kVsinkOut + vs.paName, targetKey(*g, sink));
         }
+        for (const auto &mic : vs.inputSources)
+            wire(kMic + mic, kVsinkIn + vs.paName);
+    }
+
+    const auto &captureBindings = captureBindingsFor(*g);
+    for (const auto &cap : g->captures) {
+        QString from;
+        const QString node = nodeOfVirtualMic(cap.sourceName);
+        if (node.isEmpty())
+            from = kMic + cap.sourceName;
+        else if (g->virtualSink(node))
+            from = kVsinkOut + node;
+        else
+            continue;   // the node is gone
+        QVector<uint32_t> streams = captureBindings.keys(cap.key);
+        std::sort(streams.begin(), streams.end());
+        if (streams.isEmpty())
+            wire(from, kRecApp + cap.key);
+        for (uint32_t s : std::as_const(streams))
+            wire(from, kRec + QString::number(s));
     }
     return result;
 }
@@ -503,6 +687,55 @@ QVariantList RoutingEngine::offlineSinks(int row)
     return result;
 }
 
+QVariantList RoutingEngine::offlineMics(int row)
+{
+    QVariantList result;
+    const AudioGroup *g = group(row);
+    if (!g) return result;
+
+    QSet<QString> present;
+    const auto sources = m_backend->availableSources();
+    for (const auto &s : sources)
+        present.insert(s.name);
+
+    QStringList missing;
+    auto consider = [&](const QString &mic) {
+        if (!present.contains(mic) && !isInternalSourceName(mic) && !missing.contains(mic))
+            missing.append(mic);
+    };
+    for (const auto &vs : g->virtualSinks)
+        for (const auto &mic : vs.inputSources) consider(mic);
+    for (const auto &c : g->captures)
+        consider(c.sourceName);
+
+    for (const auto &mic : std::as_const(missing)) {
+        QVariantMap m;
+        m[QStringLiteral("key")] = QString(kMic + mic);
+        const QString label = m_groups->sinkLabel(mic);
+        m[QStringLiteral("description")] = label.isEmpty() ? mic : label;
+        result.append(m);
+    }
+    return result;
+}
+
+QVariantList RoutingEngine::offlineRecorders(int row)
+{
+    QVariantList result;
+    const AudioGroup *g = group(row);
+    if (!g) return result;
+
+    const auto boundKeys = captureBindingsFor(*g).values();
+    for (const auto &cap : g->captures) {
+        if (boundKeys.contains(cap.key)) continue;
+        QVariantMap m;
+        m[QStringLiteral("key")] = QString(kRecApp + cap.key);
+        m[QStringLiteral("appName")] = recorderDisplayName(cap.appName());
+        m[QStringLiteral("mediaName")] = cap.mediaHint;
+        result.append(m);
+    }
+    return result;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Virtual nodes
 // ═══════════════════════════════════════════════════════════════════════════
@@ -539,6 +772,7 @@ void RoutingEngine::removeVirtualSink(int row, const QString &paName)
     for (auto &vs : g->virtualSinks)
         vs.loopbackTargets.removeAll(paName);
     dropUnusedRoutes(*g);
+    dropCapturesFrom(*g, virtualMicName(paName));
 
     emit virtualSinksChanged();
     roomEdited(row);
@@ -580,6 +814,9 @@ void RoutingEngine::configureVirtualSink(int row, const QString &paName,
             if (g->virtualSink(t) && reaches(*g, t, paName, seen))
                 vs->loopbackTargets.removeAll(t);
         }
+    } else {
+        // A network node's OUT cannot feed a recording application
+        dropCapturesFrom(*g, virtualMicName(paName));
     }
 
     emit virtualSinksChanged();
@@ -597,6 +834,7 @@ QVariantList RoutingEngine::virtualSinks(int row) const
         m[QStringLiteral("displayName")] = vs.displayName;
         m[QStringLiteral("paName")] = vs.paName;
         m[QStringLiteral("loopbackTargets")] = vs.loopbackTargets;
+        m[QStringLiteral("inputSources")] = vs.inputSources;
         m[QStringLiteral("networkEnabled")] = vs.network.enabled;
         m[QStringLiteral("channel")] = vs.network.channel;
         m[QStringLiteral("passphrase")] = vs.network.passphrase;
@@ -623,7 +861,9 @@ void RoutingEngine::onServerDisconnected()
     m_virtualSinks.clear();
     m_combines.clear();
     m_managedStreams.clear();
+    m_managedRecorders.clear();
     m_moveAttempts.clear();
+    m_recorderMoveAttempts.clear();
     emit connectionsChanged();
 }
 
@@ -636,30 +876,98 @@ void RoutingEngine::stopNetworkNode(const QString &paName)
     m_netNodes.remove(paName);
 }
 
-bool RoutingEngine::tryMove(const PASinkInputInfo &stream, uint32_t sinkIndex,
-                            const QString &sinkName)
+bool RoutingEngine::allowMove(QHash<uint32_t, MoveAttempts> &all, uint32_t stream,
+                              const QString &appName, const QString &target)
 {
     // Something else (a session-manager rule, another tool) may keep moving
     // the stream back.  Do not turn that into an endless tug of war.
     constexpr int kMaxAttempts = 6;
     constexpr qint64 kWindowMs = 10000;
 
-    MoveAttempts &attempts = m_moveAttempts[stream.index];
+    MoveAttempts &attempts = all[stream];
     const qint64 now = m_clock.elapsed();
-    if (attempts.target != sinkName || now - attempts.since > kWindowMs)
-        attempts = { sinkName, 0, now };
+    if (attempts.target != target || now - attempts.since > kWindowMs)
+        attempts = { target, 0, now };
 
     if (attempts.count >= kMaxAttempts) {
         if (attempts.count == kMaxAttempts) {
-            qWarning() << "SoundRoot: stream" << stream.index << "(" << stream.appName
-                       << ") does not stay on" << sinkName << "- backing off";
+            qWarning() << "SoundRoot: stream" << stream << "(" << appName
+                       << ") does not stay on" << target << "- backing off";
             ++attempts.count;
         }
         return false;
     }
     ++attempts.count;
+    return true;
+}
+
+bool RoutingEngine::tryMove(const PASinkInputInfo &stream, uint32_t sinkIndex,
+                            const QString &sinkName)
+{
+    if (!allowMove(m_moveAttempts, stream.index, stream.appName, sinkName))
+        return false;
     m_backend->moveSinkInput(stream.index, sinkIndex);
     return true;
+}
+
+void RoutingEngine::reconcileRecorders(const AudioGroup *room)
+{
+    const auto sources = m_backend->availableSources();
+    const auto recorders = m_backend->availableSourceOutputs();
+
+    QHash<QString, uint32_t> sourceIndex;
+    for (const auto &s : sources)
+        sourceIndex.insert(s.name, s.index);
+    QHash<uint32_t, const PASourceOutputInfo *> byIndex;
+    for (const auto &r : recorders)
+        byIndex.insert(r.index, &r);
+
+    // Recording application → the source it should record
+    QHash<uint32_t, QString> desired;
+    if (room) {
+        const auto &bindings = captureBindingsFor(*room);
+        for (auto it = bindings.cbegin(); it != bindings.cend(); ++it) {
+            for (const auto &cap : room->captures) {
+                if (cap.key == it.value()) { desired.insert(it.key(), cap.sourceName); break; }
+            }
+        }
+    }
+
+    for (auto it = desired.cbegin(); it != desired.cend(); ++it) {
+        const PASourceOutputInfo *rec = byIndex.value(it.key());
+        if (!rec) continue;
+        m_managedRecorders.insert(rec->index);
+        // An unplugged microphone, or a node microphone that is still
+        // loading: nothing to do now; its arrival triggers the next pass.
+        const auto target = sourceIndex.constFind(it.value());
+        if (target == sourceIndex.constEnd()) continue;
+        if (rec->sourceIndex == target.value())
+            m_recorderMoveAttempts.remove(rec->index);
+        else if (allowMove(m_recorderMoveAttempts, rec->index, rec->appName, it.value()))
+            m_backend->moveSourceOutput(rec->index, target.value());
+    }
+
+    // Applications that lost their wire record the default microphone again
+    QString fallback = m_backend->defaultSourceName();
+    if (!sourceIndex.contains(fallback) || isInternalSourceName(fallback)) {
+        fallback.clear();
+        for (const auto &s : sources) {
+            if (!isInternalSourceName(s.name)) { fallback = s.name; break; }
+        }
+    }
+    for (auto it = m_managedRecorders.begin(); it != m_managedRecorders.end();) {
+        if (desired.contains(*it)) { ++it; continue; }
+        const PASourceOutputInfo *rec = byIndex.value(*it);
+        if (rec && !fallback.isEmpty() && rec->sourceIndex != sourceIndex.value(fallback))
+            m_backend->moveSourceOutput(rec->index, sourceIndex.value(fallback));
+        m_recorderMoveAttempts.remove(*it);
+        it = m_managedRecorders.erase(it);
+    }
+
+    for (auto it = m_recorderMoveAttempts.begin(); it != m_recorderMoveAttempts.end();) {
+        if (byIndex.contains(it.key())) ++it;
+        else it = m_recorderMoveAttempts.erase(it);
+    }
 }
 
 void RoutingEngine::reconcile()
@@ -691,6 +999,11 @@ void RoutingEngine::reconcile()
 
     rememberSinkLabels();
 
+    QSet<QString> sourcePresent;
+    const auto sources = m_backend->availableSources();
+    for (const auto &s : sources)
+        sourcePresent.insert(s.name);
+
     QHash<uint32_t, QStringList> desired;   // stream → sinks it should play on
 
     // ── 1. Virtual and network nodes ────────────────────────────────────
@@ -701,6 +1014,13 @@ void RoutingEngine::reconcile()
             wantedVirtual.insert(vs.paName);
             m_backend->createVirtualSink(vs.paName, vs.displayName);
             const QStringList targets = present(vs.loopbackTargets);
+
+            // Microphones into IN, for plain and network nodes alike
+            QStringList mics;
+            for (const auto &mic : vs.inputSources) {
+                if (sourcePresent.contains(mic)) mics.append(mic);
+            }
+            m_backend->setVirtualSinkInputs(vs.paName, mics);
 
             if (!vs.isNetwork()) {
                 m_backend->setVirtualSinkLoopbacks(vs.paName, targets);
@@ -820,4 +1140,7 @@ void RoutingEngine::reconcile()
         if (inputByIndex.contains(it.key())) ++it;
         else it = m_moveAttempts.erase(it);
     }
+
+    // ── 6. Recording applications ───────────────────────────────────────
+    reconcileRecorders(room);
 }

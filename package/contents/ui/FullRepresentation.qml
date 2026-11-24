@@ -83,6 +83,8 @@ PlasmaExtras.Representation {
     property var nodeColors: ({})
     property var ghostSources: []
     property var ghostSinks: []
+    property var ghostMics: []
+    property var ghostRecorders: []
     property var virtualNodes: []
 
     readonly property var wirePalette: ["#4a90d9", "#50c878", "#e74c3c", "#f39c12", "#9b59b6",
@@ -130,6 +132,10 @@ PlasmaExtras.Representation {
         if (!sameData(ghostSources, sources)) ghostSources = sources
         var sinks = selectedRoomIndex >= 0 ? Plasmoid.offlineSinks(selectedRoomIndex) : []
         if (!sameData(ghostSinks, sinks)) ghostSinks = sinks
+        var mics = selectedRoomIndex >= 0 ? Plasmoid.offlineMics(selectedRoomIndex) : []
+        if (!sameData(ghostMics, mics)) ghostMics = mics
+        var recorders = selectedRoomIndex >= 0 ? Plasmoid.offlineRecorders(selectedRoomIndex) : []
+        if (!sameData(ghostRecorders, recorders)) ghostRecorders = recorders
     }
 
     function refreshVirtualNodes() {
@@ -297,9 +303,13 @@ PlasmaExtras.Representation {
                 nodeColors: fullRoot.nodeColors
                 ghostSources: fullRoot.ghostSources
                 ghostSinks: fullRoot.ghostSinks
+                ghostMics: fullRoot.ghostMics
+                ghostRecorders: fullRoot.ghostRecorders
                 virtualNodes: fullRoot.virtualNodes
                 sinkModel: Plasmoid.sinkModel ?? null
                 sinkInputModel: Plasmoid.sinkInputModel ?? null
+                sourceModel: Plasmoid.sourceModel ?? null
+                sourceOutputModel: Plasmoid.sourceOutputModel ?? null
 
                 onNodeSettingsRequested: function(node) {
                     nodeDialog.openFor(fullRoot.selectedRoomIndex, node, fullRoot.selectedRoomActive)

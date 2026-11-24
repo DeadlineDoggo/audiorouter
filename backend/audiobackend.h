@@ -16,10 +16,11 @@
 /**
  * @brief Async wrapper around the PulseAudio threaded-mainloop API.
  *
- * Provides live lists of sinks (output devices) and sink-inputs (application
- * audio streams) and the primitives the routing engine builds on: moving a
- * stream, combine-sinks, virtual null-sinks with loopbacks, and the record /
- * playback streams of network nodes.
+ * Provides live lists of sinks (output devices), sink-inputs (applications
+ * that play), sources (microphones) and source-outputs (applications that
+ * record), and the primitives the routing engine builds on: moving a stream,
+ * combine-sinks, virtual null-sinks with their microphone and loopbacks, and
+ * the record / playback streams of network nodes.
  *
  * Works on PipeWire through its PulseAudio compatibility layer.
  *
@@ -49,8 +50,12 @@ public:
     QVector<PASinkInfo>      availableSinks() const override;
     QVector<PASinkInputInfo> availableSinkInputs() const override;
     QString                  defaultSinkName() const override;
+    QVector<PASourceInfo>       availableSources() const override;
+    QVector<PASourceOutputInfo> availableSourceOutputs() const override;
+    QString                     defaultSourceName() const override;
 
     void moveSinkInput(uint32_t sinkInputIndex, uint32_t sinkIndex) override;
+    void moveSourceOutput(uint32_t sourceOutputIndex, uint32_t sourceIndex) override;
 
     void createCombinedSink(const QString &name, const QStringList &sinkNames) override;
     void destroyCombinedSink(const QString &name) override;
@@ -58,6 +63,7 @@ public:
     void createVirtualSink(const QString &paName, const QString &displayName) override;
     void destroyVirtualSink(const QString &paName) override;
     void setVirtualSinkLoopbacks(const QString &paName, const QStringList &targetSinks) override;
+    void setVirtualSinkInputs(const QString &paName, const QStringList &sourceNames) override;
 
     void openNetworkCapture(const QString &paName) override;
     void closeNetworkCapture(const QString &paName) override;
@@ -83,9 +89,19 @@ private:
     // ── Internal helpers (PA lock held) ─────────────────────────────────
     void refreshSinksLocked();
     void refreshSinkInputsLocked();
+    void refreshSourcesLocked();
+    void refreshSourceOutputsLocked();
     void unloadModuleLocked(uint32_t moduleIndex);
     /// Load every wanted loopback of paName that is neither loaded nor loading.
     void loadMissingLoopbacksLocked(const QString &paName);
+    /// Load the node's microphone and every wanted input loopback of paName
+    /// that is neither loaded nor loading.
+    void loadVirtualMicLocked(const QString &paName);
+    void loadMissingInputsLocked(const QString &paName);
+    /// Start a module load whose result virtualModuleLoadCallback files
+    /// under @p key; false if it could not be started.
+    bool loadVirtualModuleLocked(const char *module, const QString &args,
+                                 const QString &key, int kind);
     /// Start a module-combine-sink load.  The caller has already recorded it
     /// in m_pendingCombined.
     void loadCombinedLocked(const QString &name, const QStringList &sinkNames);
@@ -117,6 +133,12 @@ private:
     static void sinkInputInfoCallback(pa_context *c,
                                       const pa_sink_input_info *info,
                                       int eol, void *userdata);
+    static void sourceInfoCallback(pa_context *c,
+                                   const pa_source_info *info,
+                                   int eol, void *userdata);
+    static void sourceOutputInfoCallback(pa_context *c,
+                                         const pa_source_output_info *info,
+                                         int eol, void *userdata);
     static void moduleLoadCallback(pa_context *c, uint32_t idx, void *userdata);
     static void virtualModuleLoadCallback(pa_context *c, uint32_t idx, void *userdata);
     static void successCallback(pa_context *c, int success, void *userdata);
@@ -133,10 +155,13 @@ private:
     mutable QMutex              m_mutex;
     QVector<PASinkInfo>         m_sinks;
     QVector<PASinkInputInfo>    m_sinkInputs;
+    QVector<PASourceInfo>       m_sources;
+    QVector<PASourceOutputInfo> m_sourceOutputs;
     QMap<QString, uint32_t>     m_combinedModules;   // name → module index
     QMap<QString, QStringList>  m_combinedSlaves;    // name → DESIRED slave sink names (absent = not wanted)
     QMap<QString, QStringList>  m_pendingCombined;   // name → slaves of the load in flight (at most one per name)
     QString  m_defaultSinkName;            // guarded by m_mutex
+    QString  m_defaultSourceName;          // guarded by m_mutex
     int      m_defaultSinkVolume = 100;    // guarded by m_mutex
 
     // Everything below is only touched with the PA mainloop lock held
@@ -144,6 +169,10 @@ private:
     QMap<QString, uint32_t>     m_loopbackModules;   // "paName|sinkName" → module index
     QSet<QString>               m_wantedVirtualSinks; // desired paNames
     QSet<QString>               m_wantedLoopbacks;    // desired "paName|sinkName"
+    QMap<QString, QString>      m_wantedMics;         // paName → description of its microphone
+    QMap<QString, uint32_t>     m_micModules;         // paName → module index
+    QSet<QString>               m_wantedInputs;       // desired "paName|sourceName"
+    QMap<QString, uint32_t>     m_inputModules;       // "paName|sourceName" → module index
     QSet<QString>               m_pendingVirtualLoads; // keys of either kind with a load in flight
     int                         m_pendingUnloads = 0; // unload ops issued, not yet confirmed
     QHash<QString, NetStream *> m_captureStreams;     // paName → record stream
@@ -154,12 +183,16 @@ private:
     // Pending buffers for atomic refresh
     QVector<PASinkInfo>         m_pendingSinks;
     QVector<PASinkInputInfo>    m_pendingSinkInputs;
+    QVector<PASourceInfo>       m_pendingSources;
+    QVector<PASourceOutputInfo> m_pendingSourceOutputs;
 
     // Generation counters – bumped each time a new enumeration starts.  Each
     // request carries its generation in its userdata; results from an older,
     // superseded request are discarded.
     uint64_t m_sinkInputGen     = 0;
     uint64_t m_sinkGen          = 0;
+    uint64_t m_sourceGen        = 0;
+    uint64_t m_sourceOutputGen  = 0;
 
     static constexpr int kShutdownWaitMs = 1500; // max wait for module cleanup on exit
     static constexpr int kReconnectDelayMs = 1000;
