@@ -179,6 +179,45 @@ private slots:
         QVERIFY(bHeardA);
     }
 
+    // Two nodes of one SoundRoot on the same channel are a pair: each hears
+    // the other.  No address is configured and multicast is off, so this
+    // only works if they find each other inside the machine.
+    void twoNodesOfOneDeviceArePaired()
+    {
+        NetEngine a(options(QStringLiteral("desktop")));
+        QTRY_VERIFY(a.dataPort() != 0);
+        a.startNode(spec(QStringLiteral("L"), QStringLiteral("den"), QStringLiteral("pw")));
+        a.startNode(spec(QStringLiteral("R"), QStringLiteral("den"), QStringLiteral("pw")));
+        a.startNode(spec(QStringLiteral("X"), QStringLiteral("other"), QStringLiteral("pw")));
+        a.setNodeListening(QStringLiteral("L"), true);
+        a.setNodeListening(QStringLiteral("R"), true);
+        a.setNodeListening(QStringLiteral("X"), true);
+        QTRY_VERIFY_WITH_TIMEOUT(peers(a, QStringLiteral("L")).size() == 1
+                                 && peers(a, QStringLiteral("L"))[0].toMap().value(QStringLiteral("listening")).toBool()
+                                 && peers(a, QStringLiteral("R")).size() == 1
+                                 && peers(a, QStringLiteral("R"))[0].toMap().value(QStringLiteral("listening")).toBool(),
+                                 6000);
+        QVERIFY(peers(a, QStringLiteral("X")).isEmpty());   // a different channel stays alone
+
+        bool lHeardR = false, rHeardL = false;
+        for (int i = 0; i < 120; ++i) {
+            play(a, QStringLiteral("L"), rampPacket(qint64(i) * kFrames, 1));    // positive left channel
+            play(a, QStringLiteral("R"), rampPacket(qint64(i) * kFrames, -1));   // negative left channel
+            QThread::msleep(3);
+            const auto atL = listen(a, QStringLiteral("L"));
+            const auto atR = listen(a, QStringLiteral("R"));
+            const auto atX = listen(a, QStringLiteral("X"));
+            // Each node hears only its partner, never itself
+            QVERIFY(atL[0] <= 0);
+            QVERIFY(atR[0] >= 0);
+            QCOMPARE(int(atX[0]), 0);
+            lHeardR |= atL[0] < 0;
+            rHeardL |= atR[0] > 0;
+        }
+        QVERIFY(lHeardR);
+        QVERIFY(rHeardL);
+    }
+
     void threeDevicesAreMixed()
     {
         NetEngine a(options(QStringLiteral("a")));

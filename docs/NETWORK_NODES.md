@@ -31,6 +31,12 @@ A channel is a **name** and a **passphrase**. Devices whose node has the same
 two values are on the same channel; nothing else has to be configured. More
 than two devices can share a channel: each one hears the mix of all others.
 
+Two nodes on the **same computer** with the same channel and passphrase are a
+pair as well: what is played into IN of one comes out of OUT of the other.
+They reach each other inside the machine (loopback), so this works without a
+network connection and with a firewall that blocks the ports below. It is also
+the quickest way to try a network node with one computer.
+
 A network node is wired like any other node, so audio can go from local
 applications to remote devices, from remote devices to local outputs, or into
 another virtual node.
@@ -176,6 +182,10 @@ data, so it cannot be altered either.
 
 ### Joining
 
+Nodes of one SoundRoot instance that share a channel also send their beacons
+to `127.0.0.1` on the instance's own port, and ignore each other's packets
+from any other address.
+
 A device that receives an authentic packet from an unknown sender — or from a
 known sender at a new address — sends it a Hello. The peer is **confirmed**
 when the matching HelloAck arrives from that address. Only confirmed peers are
@@ -231,7 +241,7 @@ ctest --test-dir build
 
 `tst_netengine` runs two or three engines in one process over the loopback
 interface: discovery by address, handshake, audio in both directions sample
-for sample, mixing of several senders, wrong passphrase, forged and replayed
+for sample, mixing of several senders, two nodes of one device, wrong passphrase, forged and replayed
 packets, leaving and timing out.
 
 Its multicast case skips when the machine does not deliver multicast to itself

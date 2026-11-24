@@ -363,6 +363,16 @@ void NetWorker::sendBeacons(Node &node)
             send(beacon, multicastGroup(), m_options.discoveryPort);
         }
     }
+    // Another node of ours on the same channel (two nodes of one machine
+    // that are meant as a pair): reach it over the loopback interface, which
+    // needs neither a network nor multicast getting past a firewall.
+    for (auto it = m_nodes.cbegin(); it != m_nodes.cend(); ++it) {
+        if (it->senderId != node.senderId && it->keys.isValid()
+            && it->keys.channelId == node.keys.channelId) {
+            send(beacon, QHostAddress(QHostAddress::LocalHost), boundPort);
+            break;
+        }
+    }
     for (const auto &target : std::as_const(node.staticPeers))
         send(beacon, target.first, target.second);
     // Also straight to the peers we know: keeps the channel alive on
@@ -455,6 +465,15 @@ void NetWorker::handleDatagram(const QByteArray &data, const QHostAddress &from,
     if (!isLocalNetworkAddress(from)) return;   // LAN only
 
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
+
+    // Our own nodes talk to each other over loopback only.  Their multicast
+    // beacons also come back with the LAN address; following those would
+    // make the pair jump between two addresses.
+    if (!from.isLoopback()) {
+        for (auto it = m_nodes.cbegin(); it != m_nodes.cend(); ++it) {
+            if (it->senderId == header.senderId) return;
+        }
+    }
 
     // One channel can be joined by several of our nodes
     for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it) {

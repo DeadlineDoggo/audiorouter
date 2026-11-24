@@ -122,8 +122,8 @@ Rectangle {
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 opacity: 0.75
                 text: overlay.networkOn
-                      ? "Every device whose SoundRoot has a node with the same channel name and passphrase is connected: what is played into IN here comes out of OUT there, and the other way round. The audio is encrypted; anyone who has the passphrase can listen and play."
-                      : "A local node passes whatever is played into IN on to the outputs wired to OUT."
+                      ? "Every node with the same channel name and passphrase is connected, on other devices and on this computer: what is played into IN here comes out of OUT there, and the other way round. The audio is encrypted; anyone who has the passphrase can listen and play."
+                      : "A local node passes whatever is played into IN on to the outputs wired to OUT. To pair two nodes, turn this on in both and give them the same channel name and passphrase; on one computer that works without a network."
             }
 
             GridLayout {
