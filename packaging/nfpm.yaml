@@ -1,7 +1,11 @@
 # nfpm definition: one description, three package formats (.deb, .rpm, Arch).
-# Run it through `sh packaging/build-packages.sh`; it sets NF_VERSION and unpacks
-# the installed tree (what `cmake --install` put under DESTDIR) to build/pkgroot,
-# because nfpm does not expand variables in `contents[].src`.
+# Run it through `sh packaging/build-packages.sh`: it sets NF_VERSION, unpacks
+# the installed tree (what `cmake --install` put under DESTDIR) to build/pkgroot
+# and appends the `contents:` list to a copy of this file (build/nfpm.yaml).
+#
+# The files are listed one by one on purpose. With `type: tree` nfpm also packs
+# the system folders (/usr, /usr/lib, ...) and writes a wrong mode for them into
+# the Arch package, which makes pacman warn "directory permissions differ".
 #
 # SoundRoot is a compiled Plasma plugin, so a package is built once per
 # distribution family, on that family's own libraries. Plasma then finds the
@@ -21,11 +25,6 @@ description: |
   create virtual nodes and share them with other computers on the local network.
   Works with PipeWire and PulseAudio.
 
-contents:
-  - src: build/pkgroot
-    dst: /
-    type: tree
-
 # Runtime libraries come in through plasma-workspace (Plasma, Qt and KDE
 # Frameworks); the audio client library and the encryption library are listed
 # because the plugin links to them directly.
@@ -44,3 +43,5 @@ overrides:
       - plasma-workspace
       - libpulse
       - libsodium
+
+# contents: appended by build-packages.sh

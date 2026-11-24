@@ -150,7 +150,12 @@ jobs:
           pattern: '{package-*,source}'     # not the staging trees
           merge-multiple: true
       - name: Checksums
-        run: cd dist && sha256sum * > SHA256SUMS
+        run: |
+          cd dist
+          # GitHub turns "~" in an uploaded file name into "."; rename first so
+          # SHA256SUMS and the notes name the files people actually download.
+          for f in *~*; do [ -e "$f" ] && mv "$f" "$(printf '%s' "$f" | tr '~' '.')"; done
+          sha256sum * > SHA256SUMS
       - name: Release type and notes
         id: kind
         run: |
